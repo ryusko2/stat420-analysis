@@ -1,3 +1,11 @@
+---
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
 ##STAT-420 Data Analysis Project
 ##*Oh! The agony of an airline statistician*
 ###8/4/2017
@@ -87,15 +95,18 @@ The cleaned data (477MB) is not maintained in the repository due to size and ban
 
 A random sample is displayed below:
 
-|origin_ICAO |dest_ICAO |origin_state |origin_regn |origin_subr |dest_state |dest_regn |dest_subr |intra_regn |intra_subr | passengers| seats| flights| dist|   date| year|month | origin_pop| dest_pop|
-|:-----------|:---------|:------------|:-----------|:-----------|:----------|:---------|:---------|:----------|:----------|----------:|-----:|-------:|----:|------:|----:|:-----|----------:|--------:|
-|CRP         |DFW       |TX           |S           |WSC         |TX         |S         |WSC       |TRUE       |TRUE       |       3379|  9523|      89|  354| 199101| 1991|Jan   |     374065|  8182938|
-|CLT         |LIT       |NC           |S           |SA          |AR         |S         |WSC       |TRUE       |FALSE      |       1801|  4488|      66|  642| 199301| 1993|Jan   |    1086132|   554606|
-|DTW         |ROA       |MI           |MW          |ENC         |VA         |S         |SA        |FALSE      |FALSE      |       1433|  2642|      58|  382| 200601| 2006|Jan   |    8969084|   294767|
-|GSO         |LGA       |NC           |S           |SA          |NY         |NE        |MA        |FALSE      |FALSE      |        182|   206|       2|  461| 199312| 1993|Dec   |     561098| 34026518|
-|JAN         |ATL       |MS           |S           |ESC         |GA         |S         |SA        |TRUE       |FALSE      |       2502|  3100|      62|  341| 200208| 2002|Aug   |     504423|  4555490|
-|IAH         |DFW       |TX           |S           |WSC         |TX         |S         |WSC       |TRUE       |TRUE       |       3300|  4368|      42|  224| 199612| 1996|Dec   |    4268132|  8994450|
-|LAX         |HNL       |CA           |W           |P           |HI         |W         |P         |TRUE       |TRUE       |          0|     0|      26| 2556| 200608| 2006|Aug   |   25427320|   903467|
-|HNL         |SEA       |HI           |W           |P           |WA         |W         |P         |TRUE       |TRUE       |       8535|  9420|      60| 2677| 200911| 2009|Nov   |     907574|  6815696|
-|ROA         |MEM       |VA           |S           |SA          |TN         |S         |ESC       |TRUE       |FALSE      |          0|     0|       3|  580| 200507| 2005|Jul   |     292054|  1261429|
-|ANC         |ORD       |AK           |W           |P           |IL         |MW        |ENC       |FALSE      |FALSE      |          0|     0|      19| 2846| 200706| 2007|Jun   |     360908| 18903872|
+```{r, warning = FALSE}
+#load data
+flight_edges = readr::read_csv("flight_edges.csv", col_types = "icccccccccclliiiiiicii")
+
+#remove first column
+flight_edges = flight_edges[,2:ncol(flight_edges)]
+
+#Some months have flights flown, but no seats.  These could represent private or military
+#flights.  In either case, from an airline perspective, we are not interested in
+#these flights.  They represent ~ 10% of the data.  
+flight_edges = subset(flight_edges, flight_edges$seats > 0)
+
+#sample some data, removing a couple columns containing 'city'
+knitr::kable(flight_edges[runif(10, min = 1, max = nrow(flight_edges)),-c(3,7)])
+```

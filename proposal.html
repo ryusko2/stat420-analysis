@@ -206,7 +206,7 @@ $(document).ready(function () {
 </tr>
 </tbody>
 </table>
-<p>We hope to explore interactions and possibly model predictions for the response variable(s) <code>Passengers</code>, <code>Seats</code>, and/or <code>Flights</code>. We have already observed high correlation between <code>Flights</code> and both <code>Seats</code> and <code>Passengers</code>, so it is natural to include only one of these variables in our model. This correlation is expected because, as more flights are flown between destinations, there are more seats available, and only a certain number of passengers may fly in those seats.</p>
+<p>We hope to explore interactions and possibly model predictions for the response variable(s) <code>Passengers</code>, <code>Seats</code>, and/or <code>Flights</code>. We have already observed high correlation between <code>Flights</code> and both <code>Seats</code> and <code>Passengers</code>, so we may not need all three of these variables in our model. This correlation is expected because, as more flights are flown between destinations, there are more seats available, and only a certain number of passengers may fly in those seats.</p>
 <p>We have also considered confirming busy travel months by analyzing the response to <code>date</code>.</p>
 </div>
 </div>
@@ -216,7 +216,7 @@ $(document).ready(function () {
 <li>200 Observations, minimum
 <ul>
 <li>The flight data contains over 3.6M observations of 13 variables</li>
-<li>Our cleaned data contains over 3.6M observations of 21 variables</li>
+<li>Our cleaned data contains over 3.2M observations of 21 variables</li>
 </ul></li>
 <li>Has a numeric response variable
 <ul>
@@ -319,36 +319,29 @@ $(document).ready(function () {
 <ul>
 <li>To aid in analysis (and ease computation), we have also coded variables <code>intra_regn</code> and <code>intra_subr</code> that represent whether a flight flies <em>within</em> or <em>leaves</em> the region or subregion that it originated from.</li>
 <li><code>date</code> has been split out into <code>year &lt;int&gt;</code> and <code>month &lt;Factor&gt;</code></li>
-<li>It was recently discovered that some of observations contained a <code>seats</code> value of 0, but a <code>flights</code> value &gt; 0. This could be explained by private or military flights that were logged, or simply erroneous data. In either case, running <code>env_setup.R</code> will remove these observations that amount to just under 10% of all observations. New dataset size is 3.2M.</li>
+<li>It was recently discovered that some of observations contained a <code>seats</code> value of 0, but a <code>flights</code> value &gt; 0. This could be explained by private, cargo (UPS/FedEx), or military flights that were logged, or simply erroneous data. In either case, running <code>env_setup.R</code> will remove these observations that amount to just under 10% of all observations. New dataset size is 3.2M.</li>
 <li>Coding all 3.6M [raw] regions &amp; subregions took 1h15m processing time</li>
+<li>We welcome feedback on how to optimize (or vectorize) the <code>get_region_chr</code> function starting at line 28 in <code>region_helper.R</code>, as this is the function that, we believe, caused much of the processing “delay” (who’s really complaining) since it had to iterate over all 3.6M raw data points.</li>
 </ul>
 </div>
 <div id="cleaned-data" class="section level2">
 <h2>Cleaned Data</h2>
 <p>The cleaned data (477MB) is not maintained in the repository due to size and bandwidth restrictions on github, but can be downloaded <a href="https://http://ryusko2.web.engr.illinois.edu/files/flight_edges.csv">here</a>. <strong>Please right-click and save as to prevent opening in your browser.</strong></p>
 <p>A random sample is displayed below:</p>
-<table style="width:100%;">
-<colgroup>
-<col width="6%"></col>
-<col width="5%"></col>
-<col width="7%"></col>
-<col width="6%"></col>
-<col width="6%"></col>
-<col width="6%"></col>
-<col width="5%"></col>
-<col width="5%"></col>
-<col width="6%"></col>
-<col width="6%"></col>
-<col width="6%"></col>
-<col width="3%"></col>
-<col width="4%"></col>
-<col width="3%"></col>
-<col width="4%"></col>
-<col width="3%"></col>
-<col width="3%"></col>
-<col width="6%"></col>
-<col width="5%"></col>
-</colgroup>
+<pre class="r"><code>#load data
+flight_edges = readr::read_csv(&quot;flight_edges.csv&quot;, col_types = &quot;icccccccccclliiiiiicii&quot;)
+
+#remove first column
+flight_edges = flight_edges[,2:ncol(flight_edges)]
+
+#Some months have flights flown, but no seats.  These could represent private or military
+#flights.  In either case, from an airline perspective, we are not interested in
+#these flights.  They represent ~ 10% of the data.  
+flight_edges = subset(flight_edges, flight_edges$seats &gt; 0)
+
+#sample some data, removing a couple columns containing 'city'
+knitr::kable(flight_edges[runif(10, min = 1, max = nrow(flight_edges)),-c(3,7)])</code></pre>
+<table>
 <thead>
 <tr class="header">
 <th align="left">origin_ICAO</th>
@@ -374,111 +367,90 @@ $(document).ready(function () {
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">CRP</td>
-<td align="left">DFW</td>
-<td align="left">TX</td>
-<td align="left">S</td>
-<td align="left">WSC</td>
-<td align="left">TX</td>
-<td align="left">S</td>
-<td align="left">WSC</td>
-<td align="left">TRUE</td>
-<td align="left">TRUE</td>
-<td align="right">3379</td>
-<td align="right">9523</td>
-<td align="right">89</td>
-<td align="right">354</td>
-<td align="right">199101</td>
-<td align="right">1991</td>
-<td align="left">Jan</td>
-<td align="right">374065</td>
-<td align="right">8182938</td>
-</tr>
-<tr class="even">
-<td align="left">CLT</td>
-<td align="left">LIT</td>
-<td align="left">NC</td>
-<td align="left">S</td>
-<td align="left">SA</td>
-<td align="left">AR</td>
-<td align="left">S</td>
-<td align="left">WSC</td>
-<td align="left">TRUE</td>
-<td align="left">FALSE</td>
-<td align="right">1801</td>
-<td align="right">4488</td>
-<td align="right">66</td>
-<td align="right">642</td>
-<td align="right">199301</td>
-<td align="right">1993</td>
-<td align="left">Jan</td>
-<td align="right">1086132</td>
-<td align="right">554606</td>
-</tr>
-<tr class="odd">
 <td align="left">DTW</td>
-<td align="left">ROA</td>
+<td align="left">ALB</td>
 <td align="left">MI</td>
 <td align="left">MW</td>
 <td align="left">ENC</td>
-<td align="left">VA</td>
-<td align="left">S</td>
-<td align="left">SA</td>
-<td align="left">FALSE</td>
-<td align="left">FALSE</td>
-<td align="right">1433</td>
-<td align="right">2642</td>
-<td align="right">58</td>
-<td align="right">382</td>
-<td align="right">200601</td>
-<td align="right">2006</td>
-<td align="left">Jan</td>
-<td align="right">8969084</td>
-<td align="right">294767</td>
-</tr>
-<tr class="even">
-<td align="left">GSO</td>
-<td align="left">LGA</td>
-<td align="left">NC</td>
-<td align="left">S</td>
-<td align="left">SA</td>
 <td align="left">NY</td>
 <td align="left">NE</td>
 <td align="left">MA</td>
 <td align="left">FALSE</td>
 <td align="left">FALSE</td>
-<td align="right">182</td>
-<td align="right">206</td>
-<td align="right">2</td>
-<td align="right">461</td>
-<td align="right">199312</td>
-<td align="right">1993</td>
-<td align="left">Dec</td>
-<td align="right">561098</td>
-<td align="right">34026518</td>
-</tr>
-<tr class="odd">
-<td align="left">JAN</td>
-<td align="left">ATL</td>
-<td align="left">MS</td>
-<td align="left">S</td>
-<td align="left">ESC</td>
-<td align="left">GA</td>
-<td align="left">S</td>
-<td align="left">SA</td>
-<td align="left">TRUE</td>
-<td align="left">FALSE</td>
-<td align="right">2502</td>
-<td align="right">3100</td>
-<td align="right">62</td>
-<td align="right">341</td>
-<td align="right">200208</td>
-<td align="right">2002</td>
-<td align="left">Aug</td>
-<td align="right">504423</td>
-<td align="right">4555490</td>
+<td align="right">5273</td>
+<td align="right">6820</td>
+<td align="right">55</td>
+<td align="right">488</td>
+<td align="right">200711</td>
+<td align="right">2007</td>
+<td align="left">Nov</td>
+<td align="right">8913164</td>
+<td align="right">852019</td>
 </tr>
 <tr class="even">
+<td align="left">MCO</td>
+<td align="left">PVD</td>
+<td align="left">FL</td>
+<td align="left">S</td>
+<td align="left">SA</td>
+<td align="left">RI</td>
+<td align="left">NE</td>
+<td align="left">NE</td>
+<td align="left">FALSE</td>
+<td align="left">FALSE</td>
+<td align="right">355</td>
+<td align="right">732</td>
+<td align="right">6</td>
+<td align="right">1073</td>
+<td align="right">199709</td>
+<td align="right">1997</td>
+<td align="left">Sep</td>
+<td align="right">1464182</td>
+<td align="right">1501497</td>
+</tr>
+<tr class="odd">
+<td align="left">BUF</td>
+<td align="left">LGA</td>
+<td align="left">NY</td>
+<td align="left">NE</td>
+<td align="left">MA</td>
+<td align="left">NY</td>
+<td align="left">NE</td>
+<td align="left">MA</td>
+<td align="left">TRUE</td>
+<td align="left">TRUE</td>
+<td align="right">464</td>
+<td align="right">1152</td>
+<td align="right">8</td>
+<td align="right">292</td>
+<td align="right">200010</td>
+<td align="right">2000</td>
+<td align="left">Oct</td>
+<td align="right">1169159</td>
+<td align="right">36705486</td>
+</tr>
+<tr class="even">
+<td align="left">ITH</td>
+<td align="left">EWR</td>
+<td align="left">NY</td>
+<td align="left">NE</td>
+<td align="left">MA</td>
+<td align="left">NJ</td>
+<td align="left">NE</td>
+<td align="left">MA</td>
+<td align="left">TRUE</td>
+<td align="left">TRUE</td>
+<td align="right">964</td>
+<td align="right">2346</td>
+<td align="right">51</td>
+<td align="right">171</td>
+<td align="right">199601</td>
+<td align="right">1996</td>
+<td align="left">Jan</td>
+<td align="right">97215</td>
+<td align="right">17190036</td>
+</tr>
+<tr class="odd">
 <td align="left">IAH</td>
 <td align="left">DFW</td>
 <td align="left">TX</td>
@@ -489,99 +461,120 @@ $(document).ready(function () {
 <td align="left">WSC</td>
 <td align="left">TRUE</td>
 <td align="left">TRUE</td>
-<td align="right">3300</td>
-<td align="right">4368</td>
-<td align="right">42</td>
+<td align="right">1051</td>
+<td align="right">1434</td>
+<td align="right">14</td>
 <td align="right">224</td>
-<td align="right">199612</td>
-<td align="right">1996</td>
-<td align="left">Dec</td>
-<td align="right">4268132</td>
-<td align="right">8994450</td>
-</tr>
-<tr class="odd">
-<td align="left">LAX</td>
-<td align="left">HNL</td>
-<td align="left">CA</td>
-<td align="left">W</td>
-<td align="left">P</td>
-<td align="left">HI</td>
-<td align="left">W</td>
-<td align="left">P</td>
-<td align="left">TRUE</td>
-<td align="left">TRUE</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="right">26</td>
-<td align="right">2556</td>
-<td align="right">200608</td>
-<td align="right">2006</td>
-<td align="left">Aug</td>
-<td align="right">25427320</td>
-<td align="right">903467</td>
+<td align="right">199205</td>
+<td align="right">1992</td>
+<td align="left">May</td>
+<td align="right">3983375</td>
+<td align="right">8314270</td>
 </tr>
 <tr class="even">
-<td align="left">HNL</td>
-<td align="left">SEA</td>
-<td align="left">HI</td>
-<td align="left">W</td>
-<td align="left">P</td>
-<td align="left">WA</td>
-<td align="left">W</td>
-<td align="left">P</td>
-<td align="left">TRUE</td>
-<td align="left">TRUE</td>
-<td align="right">8535</td>
-<td align="right">9420</td>
-<td align="right">60</td>
-<td align="right">2677</td>
-<td align="right">200911</td>
-<td align="right">2009</td>
-<td align="left">Nov</td>
-<td align="right">907574</td>
-<td align="right">6815696</td>
-</tr>
-<tr class="odd">
-<td align="left">ROA</td>
-<td align="left">MEM</td>
-<td align="left">VA</td>
+<td align="left">FLL</td>
+<td align="left">PHL</td>
+<td align="left">FL</td>
 <td align="left">S</td>
 <td align="left">SA</td>
-<td align="left">TN</td>
-<td align="left">S</td>
-<td align="left">ESC</td>
-<td align="left">TRUE</td>
+<td align="left">PA</td>
+<td align="left">NE</td>
+<td align="left">MA</td>
 <td align="left">FALSE</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="right">3</td>
-<td align="right">580</td>
-<td align="right">200507</td>
-<td align="right">2005</td>
-<td align="left">Jul</td>
-<td align="right">292054</td>
-<td align="right">1261429</td>
+<td align="left">FALSE</td>
+<td align="right">3346</td>
+<td align="right">4736</td>
+<td align="right">37</td>
+<td align="right">992</td>
+<td align="right">199012</td>
+<td align="right">1990</td>
+<td align="left">Dec</td>
+<td align="right">4074690</td>
+<td align="right">10881988</td>
+</tr>
+<tr class="odd">
+<td align="left">LGA</td>
+<td align="left">GSO</td>
+<td align="left">NY</td>
+<td align="left">NE</td>
+<td align="left">MA</td>
+<td align="left">NC</td>
+<td align="left">S</td>
+<td align="left">SA</td>
+<td align="left">FALSE</td>
+<td align="left">FALSE</td>
+<td align="right">85</td>
+<td align="right">182</td>
+<td align="right">1</td>
+<td align="right">461</td>
+<td align="right">199608</td>
+<td align="right">1996</td>
+<td align="left">Aug</td>
+<td align="right">34380072</td>
+<td align="right">584768</td>
 </tr>
 <tr class="even">
-<td align="left">ANC</td>
-<td align="left">ORD</td>
-<td align="left">AK</td>
-<td align="left">W</td>
-<td align="left">P</td>
-<td align="left">IL</td>
+<td align="left">MCO</td>
+<td align="left">BOS</td>
+<td align="left">FL</td>
+<td align="left">S</td>
+<td align="left">SA</td>
+<td align="left">MA</td>
+<td align="left">NE</td>
+<td align="left">NE</td>
+<td align="left">FALSE</td>
+<td align="left">FALSE</td>
+<td align="right">3857</td>
+<td align="right">4402</td>
+<td align="right">31</td>
+<td align="right">1121</td>
+<td align="right">200410</td>
+<td align="right">2004</td>
+<td align="left">Oct</td>
+<td align="right">1866597</td>
+<td align="right">8912958</td>
+</tr>
+<tr class="odd">
+<td align="left">DTW</td>
+<td align="left">ATL</td>
+<td align="left">MI</td>
+<td align="left">MW</td>
+<td align="left">ENC</td>
+<td align="left">GA</td>
+<td align="left">S</td>
+<td align="left">SA</td>
+<td align="left">FALSE</td>
+<td align="left">FALSE</td>
+<td align="right">2300</td>
+<td align="right">3108</td>
+<td align="right">21</td>
+<td align="right">594</td>
+<td align="right">200612</td>
+<td align="right">2006</td>
+<td align="left">Dec</td>
+<td align="right">8969084</td>
+<td align="right">5119641</td>
+</tr>
+<tr class="even">
+<td align="left">BOS</td>
+<td align="left">DTW</td>
+<td align="left">MA</td>
+<td align="left">NE</td>
+<td align="left">NE</td>
+<td align="left">MI</td>
 <td align="left">MW</td>
 <td align="left">ENC</td>
 <td align="left">FALSE</td>
 <td align="left">FALSE</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="right">19</td>
-<td align="right">2846</td>
-<td align="right">200706</td>
-<td align="right">2007</td>
-<td align="left">Jun</td>
-<td align="right">360908</td>
-<td align="right">18903872</td>
+<td align="right">900</td>
+<td align="right">2000</td>
+<td align="right">20</td>
+<td align="right">632</td>
+<td align="right">199012</td>
+<td align="right">1990</td>
+<td align="left">Dec</td>
+<td align="right">8269386</td>
+<td align="right">8503650</td>
 </tr>
 </tbody>
 </table>
