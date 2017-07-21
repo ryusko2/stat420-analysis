@@ -1,0 +1,160 @@
+---
+title: "STAT-420 Data Analysis Project"
+output: 
+  html_document:
+    toc: yes
+    toc_depth: 2
+    theme: simplex
+---
+
+###*Oh! The agony of an airline statistician*
+####8/4/2017
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen = 1, digits = 4, width = 80)
+```
+
+## Introduction
+
+[This linked repository](https://github.com/ryusko2/stat420-analysis) contains our working files for this data analysis project.
+
+Contributing team members include:
+
+* dakline2@illinois.edu ~ Doug Kline
+* anushav3@illinois.edu ~ Anusha Varadharajan
+* ryusko2@illinois.edu  ~ Ryan Yusko
+
+We have selected a dataset representing all US domestic flights from 1990 to 2009:
+
+[http://academictorrents.com/details/a2ccf94bbb4af222bf8e69dad60a68a29f310d9a](http://academictorrents.com/details/a2ccf94bbb4af222bf8e69dad60a68a29f310d9a)
+
+A summary of the raw data is presented here:
+  
+| Short Name             | Type    | Description                                                                                              |
+|------------------------|---------|----------------------------------------------------------------------------------------------------------|
+| Origin                 | String  | Three letter airport code of the origin airport                                                          |
+| Destination            | String  | Three letter airport code of the destination airport                                                     |
+| Origin City            | String  | Origin city name                                                                                         |
+| Destination City       | String  | Destination city name                                                                                    |
+| Passengers             | Integer | Number of passengers transported from origin to destination                                              |
+| Seats                  | Integer | Number of seats available on flights from origin to destination                                          |
+| Flights                | Integer | Number of flights between origin and destination (multiple records for one month, many with flights > 1) |
+| Distance               | Integer | Distance (to nearest mile) flown between origin and destination                                          |
+| Fly Date               | Integer | The date (yyyymm) of flight                                                                              |
+| Origin Population      | Integer | Origin city's population as reported by US Census                                                        |
+| Destination Population | Integer | Destination city's population as reported by US Census                                                   |
+
+We hope to explore interactions and possibly model predictions for the response variable(s) `Passengers`, `Seats`, and/or `Flights`.  We have already observed high correlation between `Flights` and both `Seats` and `Passengers`, so we may not need all three of these variables in our model.  This correlation is expected because, as more flights are flown between destinations, there are more seats available, and only a certain number of passengers may fly in those seats.
+
+We have also considered confirming busy travel months by analyzing the response to `date`.
+
+The raw data was cleaned, and several potential predictor variables have been added:
+
+| Predictor     | Coded as                    | Explanation                                             |
+|---------------|-----------------------------|---------------------------------------------------------|
+| `origin_regn` | *See region codes, below    | Region where flight originated                          |
+| `origin_subr` | *See subregion codes, below | Subregion where flight originated                       |
+| `dest_regn`   | *See region codes, below    | Destination region                                      |
+| `dest_subr`   | *See subregion codes, below | Destination subregion                                   |
+| `intra_regn`  | TRUE | FALSE                | Did flight takeoff and land in same region?             |
+| `intra_subr`  | TRUE | FALSE                | Did flight takeoff and land in same subregion?          |
+| `month`       | 1:12                        | Integer representation of month when flight(s) occurred |
+| `month.chr`   | {"Jan", "Feb", ... , "Dec"} | String representation of month when flight(s) occurred  |
+
+Regions as defined by the [U.S. Census Bureau](https://www2.census.gov/geo/pdfs/maps-data/maps/reference/us_regdiv.pdf) are coded as follows:
+
+| Region (code)  | Subregions Included                                    |
+|----------------|--------------------------------------------------------|
+| Northeast (NE) | New England, Middle Atlantic                           |
+| Midwest (MW)   | East North Central, West North Central                 |
+| South (S)      | South Atlantic, East South Central, West South Central |
+| West (W)       | Mountain, Pacific                                      |
+
+Subregions as defined by the [U.S. Census Bureau](https://www2.census.gov/geo/pdfs/maps-data/maps/reference/us_regdiv.pdf) are coded as follows:
+
+| Subregion (code)         | States Included*                    |
+|--------------------------|-------------------------------------|
+| New England (NE)         | CT, ME, MA, NH, RI, VT              |
+| Middle Atlantic (MA)     | NJ, NY, PA                          |
+| East North Central (ENC) | IL, IN, MI, OH, WI                  |
+| West North Central (WNC) | IA, KS, MN, MO, NE, ND, SD          |
+| South Atlantic (SA)      | DE, DC*, FL, GA, MD, NC, SC, VA, WV |
+| East South Central (ESC) | AL, KY, MS, TN                      |
+| West South Central (WSC) | AR, LA, OK, TX                      |
+| Mountain (M)             | AZ, CO, ID, MT, NV, NM, UT, WY      |
+| Pacific (P)              | AK, CA, HI, OR, WA                  |
+
+\*Although Washington DC is not technically a state, it is home to two airports included in this dataset: DCA (Ronald Reagan Washington National), and IAD (Washington Dulles International).  Washington DC is in the *South Atlantic* subregion of the *South* region.
+
+A random sample of our [cleaned] data is provided below:
+
+```{r warning = FALSE, cache = TRUE}
+#load data
+flight_edges = readr::read_csv("flight_edges.csv", col_types = "icccccccccclliiiiiiicii")
+
+#remove first column
+flight_edges = flight_edges[,2:ncol(flight_edges)]
+
+#Some months have flights flown, but no seats.  These could represent private or military
+#flights.  In either case, from an airline perspective, we are not interested in
+#these flights.  They represent ~ 10% of the data.  
+flight_data = subset(flight_edges, flight_edges$seats > 0)
+rm(flight_edges)
+
+#sample some data, removing columns containing `city`, ICAOs, and the raw `date`
+knitr::kable(flight_data[runif(5, min = 1, max = nrow(flight_data)),-c(1:2, 3, 7, 17)])
+```
+
+```{r message = FALSE, echo = FALSE}
+#these libraries are required for bptest() and shapiro.test, in diagnostics function
+library(lmtest)
+library(MASS)
+
+#diagnostics function
+diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, plotit = TRUE, testit = TRUE) {
+  if(plotit == TRUE) {
+    par(mfrow = c(1,2))
+    plot(fitted(model), resid(model),
+         xlab = "Fitted",
+         ylab = "Residuals",
+         main = "Fitted vs. Residuals",
+         col = pcol)
+    abline(h = 0, col = lcol, lwd = 2)
+    qqnorm(resid(model), col = pcol)
+    qqline(resid(model), col = lcol)
+  }
+  if(testit == TRUE) {
+    shapiro_wilk = shapiro.test(resid(model))
+    breusch_pagan = bptest(model)
+    list(shapiro_wilk = shapiro_wilk, breusch_pagan = breusch_pagan)
+  }
+}
+```
+
+## Methods
+
+Based on a recommendation overheard in help sessions, we decided to start modeling with a subset of 10,000 observations, without any restrictions or geographical limitation.
+
+```{r}
+#full 3.2M observations currently stored in `flight_data`
+sub_obs = 10000
+flight_sub = flight_data[sample(1:nrow(flight_data), sub_obs), ]
+```
+
+Right off the bat, we were curious to see whether `passengers` could be modeled as a response of `month` as a factor variable, verifying high-traffic seasons of flying.
+
+```{r}
+month_model = lm(passengers ~ month.chr, data = flight_sub)
+summary(month_model, data = flight_sub)
+```
+
+Even though the p-value of this regression (`r pf(summary(month_model)$fstatistic[1], summary(month_model)$fstatistic[2], summary(month_model)$fstatistic[3], lower.tail = FALSE)`) is significant, the simple representation did not prove very fruitful at all, with an adjusted $R^2$ of `r summary(month_model)$adj.r.squared`.  Interestingly, some of the months for which we would expect to see higher travel did have *relatively* lower p values.
+
+To get a better idea of how potential predictor variables could be reacting, we took a look at a `pairs` plot:
+
+```{r fig.height=8, fig.width=10, cache = TRUE}
+#remove non-numerical and non-interesting columns
+pairs(flight_sub[, -c(1:12, 17, 20)], col = "dodgerblue")
+```
+

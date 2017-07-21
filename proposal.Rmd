@@ -43,7 +43,7 @@ We have also considered confirming busy travel months by analyzing the response 
 ##Data selection requirements
 * 200 Observations, minimum
     - The flight data contains over 3.6M observations of 13 variables
-    - Our cleaned data contains over 3.2M observations of 21 variables
+    - Our cleaned data contains over 3.2M observations of 22 variables
 * Has a numeric response variable
     - `Passengers`, `Seats`, and `Flights` are all numeric variables we intend to use as potential responses
 * At least one categorical predictor
@@ -91,13 +91,13 @@ The following regions will be coded as categorical predictors alongside raw data
 
 ##Cleaned Data
 
-The cleaned data (477MB) is not maintained in the repository due to size and bandwidth restrictions on github, but can be downloaded [here](https://http://ryusko2.web.engr.illinois.edu/files/flight_edges.csv).  **Please right-click and save as to prevent opening in your browser.**
+The cleaned data (494MB) is not maintained in the repository due to size and bandwidth restrictions on github, but can be downloaded [here](https://http://ryusko2.web.engr.illinois.edu/files/flight_edges.csv).  **Please right-click and save as to prevent opening in your browser.**
 
 A random sample is displayed below:
 
 ```{r, warning = FALSE}
 #load data
-flight_edges = readr::read_csv("flight_edges.csv", col_types = "icccccccccclliiiiiicii")
+flight_edges = readr::read_csv("flight_edges.csv", col_types = "icccccccccclliiiiiiicii")
 
 #remove first column
 flight_edges = flight_edges[,2:ncol(flight_edges)]

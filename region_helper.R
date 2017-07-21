@@ -70,11 +70,13 @@ new_flight = tibble::add_column(new_flight, intra_subr = intra_subr, .after = 11
 #split date into year and month
 month_chr = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 year = floor(flight_edges$date / 100)
-month = month_chr[flight_edges$date %% 100]
+month = flight_edges$date %% 100
+month_chr = month_chr[month]
 
 #add new columns
 flight_edges = tibble::add_column(flight_edges, year = year, .after = 17)
 flight_edges = tibble::add_column(flight_edges, month = month, .after = 18)
+flight_edges = tibble::add_column(flight_edges, month.chr = month_chr, .after = 19)
 
 #write the new_flight to a .csv
 #write.csv(new_flight, file = "~/Desktop/flight_edges.csv")

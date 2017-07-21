@@ -206,7 +206,7 @@ $(document).ready(function () {
 </tr>
 </tbody>
 </table>
-<p>We hope to explore interactions and possibly model predictions for the response variable(s) <code>Passengers</code>, <code>Seats</code>, and/or <code>Flights</code>. We have already observed high correlation between <code>Flights</code> and both <code>Seats</code> and <code>Passengers</code>, so it is natural to include only one of these variables in our model. This correlation is expected because, as more flights are flown between destinations, there are more seats available, and only a certain number of passengers may fly in those seats.</p>
+<p>We hope to explore interactions and possibly model predictions for the response variable(s) <code>Passengers</code>, <code>Seats</code>, and/or <code>Flights</code>. We have already observed high correlation between <code>Flights</code> and both <code>Seats</code> and <code>Passengers</code>, so we may not need all three of these variables in our model. This correlation is expected because, as more flights are flown between destinations, there are more seats available, and only a certain number of passengers may fly in those seats.</p>
 <p>We have also considered confirming busy travel months by analyzing the response to <code>date</code>.</p>
 </div>
 </div>
@@ -216,7 +216,7 @@ $(document).ready(function () {
 <li>200 Observations, minimum
 <ul>
 <li>The flight data contains over 3.6M observations of 13 variables</li>
-<li>Our cleaned data contains over 3.6M observations of 21 variables</li>
+<li>Our cleaned data contains over 3.2M observations of 22 variables</li>
 </ul></li>
 <li>Has a numeric response variable
 <ul>
@@ -319,13 +319,14 @@ $(document).ready(function () {
 <ul>
 <li>To aid in analysis (and ease computation), we have also coded variables <code>intra_regn</code> and <code>intra_subr</code> that represent whether a flight flies <em>within</em> or <em>leaves</em> the region or subregion that it originated from.</li>
 <li><code>date</code> has been split out into <code>year &lt;int&gt;</code> and <code>month &lt;Factor&gt;</code></li>
-<li>It was recently discovered that some of observations contained a <code>seats</code> value of 0, but a <code>flights</code> value &gt; 0. This could be explained by private or military flights that were logged, or simply erroneous data. In either case, running <code>env_setup.R</code> will remove these observations that amount to just under 10% of all observations. New dataset size is 3.2M.</li>
+<li>It was recently discovered that some of observations contained a <code>seats</code> value of 0, but a <code>flights</code> value &gt; 0. This could be explained by private, cargo (UPS/FedEx), or military flights that were logged, or simply erroneous data. In either case, running <code>env_setup.R</code> will remove these observations that amount to just under 10% of all observations. New dataset size is 3.2M.</li>
 <li>Coding all 3.6M [raw] regions &amp; subregions took 1h15m processing time</li>
+<li>We welcome feedback on how to optimize (or vectorize) the <code>get_region_chr</code> function starting at line 28 in <code>region_helper.R</code>, as this is the function that, we believe, caused much of the processing “delay” (who’s really complaining) since it had to iterate over all 3.6M raw data points.</li>
 </ul>
 </div>
 <div id="cleaned-data" class="section level2">
 <h2>Cleaned Data</h2>
-<p>The cleaned data (477MB) is not maintained in the repository due to size and bandwidth restrictions on github, but can be downloaded <a href="https://http://ryusko2.web.engr.illinois.edu/files/flight_edges.csv">here</a>. <strong>Please right-click and save as to prevent opening in your browser.</strong></p>
+<p>The cleaned data (494MB) is not maintained in the repository due to size and bandwidth restrictions on github, but can be downloaded <a href="https://http://ryusko2.web.engr.illinois.edu/files/flight_edges.csv">here</a>. <strong>Please right-click and save as to prevent opening in your browser.</strong></p>
 <p>A random sample is displayed below:</p>
 <table style="width:100%;">
 <colgroup>

@@ -4,3 +4,6 @@
 .Ruserdata
 .DS_Store
 flight_edges.csv
+/analysis_cache/
+/analysis_files/
+analysis.html
