@@ -158,3 +158,74 @@ To get a better idea of how potential predictor variables could be reacting, we 
 pairs(flight_sub[, -c(1:12, 17, 20)], col = "dodgerblue")
 ```
 
+Obvious linear relationships exist in both `seats` and `flights`...finite amounts of seats and flights were flown domestically, and we would expect their distributions to be very similar.
+
+Also apparent is a very clear quadratic relationship between `flights` and `dist`.  This makes sense from an airline's persective as well...more flights fly short distances (saving money), while fewer flights fly longer distances.
+
+We were hoping to observe a better relationship between `passengers` and either `origin_pop` or `dest_pop`, but neither shows a distinguishable pattern in this sample.
+
+Knowing a little more about the data allowed us to form initial [large] models to pass to either AIC and/or BIC for selection:
+
+```{r}
+#initial model best guess
+flight_model = lm(passengers ~ seats * flights + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub)
+
+summary(flight_model)
+```
+
+The regression of our initial best guess at a model proves to be significant with a p-value of `r pf(summary(flight_model)$fstatistic[1], summary(flight_model)$fstatistic[2], summary(flight_model)$fstatistic[3], lower.tail = FALSE)`.  Both `seats` and `flights` were expected to be significant, as well as `dist^2`, as observed in the pairs plot.  The `origin_pop` and `dest_pop` were not significant on their own; but interestingly, interactions between `dist^2` and each of the population variables *was* significant.
+
+```{r fig.height=5, fig.width=10, echo = FALSE}
+#shapiro.test has max n of 5000, so we skip the test output for now
+diagnostics(flight_model, testit = FALSE)
+```
+
+While it is nice to have so many significant predictors, we appear to have an issue with both homeoscedasticity and normality, confirmed by fitted vs. residuals and Q-Q plots.
+
+Random sampling and exploring of the data has also revealed `r sum(flight_data$passengers == 0)` (out of 3.2M) observations with 0 passengers, which will not bode well for response transformation.
+
+```{r echo = FALSE}
+flight_data_0p = subset(flight_data, flight_data$passengers == 0)
+flight_sub_0p = subset(flight_sub, flight_sub$passengers == 0)
+```
+
+Digging further into the data, it can be seen that only `r round(nrow(flight_data_0p) / nrow(flight_data) * 100, 2)`% (`r nrow(flight_data_0p)`) of all 3.2M observations carried 0 passengers.  Of these zero-passenger flights, `r round((sum(flight_data_0p$dist < 500) / nrow(flight_data_0p)) * 100, 2)`% flew less than 500 miles.  In fact, the histogram confirms the logical [business] decision *not* to fly aircraft empty, if at all possible...and for shorter distances if absolutely necessary:
+
+```{r echo=FALSE, fig.height=5, fig.width=7}
+hist(flight_data_0p$dist, main = "0-Passenger Distance Histogram",
+     xlab = "Distance (miles)",
+     ylab = "Frequency",
+     col = "darkorange")
+```
+
+Airlines occasionally fly empty aircraft for maintenance purposes (for servicing at a different field), or to make an availability adjustment at an airfield where they do not have enough aircraft.  Additionally, military aircraft *will* fly 0-passenger flights (mandatory scheduled routes) where airlines will not fly [paid service routes] with 0 passengers.  For these reasons, it makes sense to remove the 0-passenger flights from consideration for future response transformation.
+
+```{r cache = TRUE}
+#pp ~ positive passenger values
+flight_data_pp = subset(flight_data, flight_data$passengers > 0)
+flight_sub_pp = subset(flight_sub, flight_sub$passengers > 0)
+flight_model = lm(passengers ~ seats * flights + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub_pp)
+```
+
+We wished to perform a response variable transformation.  To determine an appropriate transformation, we ran a Box-Cox log-likelihood plot:
+
+```{r fig.width = 7, fig.height = 5}
+boxcox(flight_model, lambda = seq(0.55, 0.68, 1/100))
+```
+
+For simplicity's sake, we chose a Box-Cox transformation with $\lambda = 0.60$.  
+
+```{r}
+flight_model_mod = lm((passengers^0.6 - 1)/0.6 ~ seats * flights + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub_pp)
+#flight_model_mod = lm((passengers^0.6 - 1)/0.6 ~ 1, data = flight_sub_pp)
+#flight_model_mod = lm(1/passengers ~ 1, data = flight_sub_pp)
+n = length(resid(flight_model_mod))
+#flight_model_fwd_BIC = step(flight_model_mod, direction = "forward", k = log(n), scope = 1/passengers ~ seats + flights + I(dist^2) + I(origin_pop^2) + I(dest_pop^2) + seats:flights + I(dist^2):I(origin_pop^2) + I(dist^2):I(dest_pop^2) +  I(origin_pop^2):I(dest_pop^2) + I(dist^2):I(origin_pop^2):I(dest_pop^2))
+#flight_model_fwd_AIC = step(flight_model_mod, direction = "forward", scope = 1/passengers ~ seats + I(dist^2) + flights + seats:flights)
+flight_model_bwd_AIC = step(flight_model_mod, direction = "backward")
+
+diagnostics(flight_model_bwd_AIC, testit = FALSE)
+shapiro.test(sample(resid(flight_model_bwd_AIC), 5000))
+bptest(flight_model_bwd_AIC)
+```
+
