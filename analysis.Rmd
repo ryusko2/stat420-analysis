@@ -91,7 +91,7 @@ Subregions as defined by the [U.S. Census Bureau](https://www2.census.gov/geo/pd
 
 \*Although Washington DC is not technically a state, it is home to two airports included in this dataset: DCA (Ronald Reagan Washington National), and IAD (Washington Dulles International).  Washington DC is in the *South Atlantic* subregion of the *South* region.
 
-A random sample of our [cleaned] data is provided below:
+A random sample of our [[cleaned] data](https://ryusko2.web.engr.illinois.edu/files/flight_edges.csv) (**right-click to download** ~494MB) is provided below:
 
 ```{r warning = FALSE, echo = FALSE, cache = TRUE}
 #load data
