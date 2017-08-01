@@ -13,6 +13,10 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 options(scipen = 1, digits = 4, width = 80)
+
+#seed
+epoch = 19700101 #The Epoch! https://en.wikipedia.org/wiki/Unix_time
+set.seed(epoch)
 ```
 
 ## Introduction
@@ -87,24 +91,89 @@ Subregions as defined by the [U.S. Census Bureau](https://www2.census.gov/geo/pd
 
 \*Although Washington DC is not technically a state, it is home to two airports included in this dataset: DCA (Ronald Reagan Washington National), and IAD (Washington Dulles International).  Washington DC is in the *South Atlantic* subregion of the *South* region.
 
-A random sample of our [cleaned] data is provided below:
+A random sample of our [[cleaned] data](https://ryusko2.web.engr.illinois.edu/files/flight_edges.csv) (**right-click to download** ~494MB) is provided below:
 
-```{r warning = FALSE, cache = TRUE}
+```{r warning = FALSE, echo = FALSE, cache = TRUE}
 #load data
 flight_edges = readr::read_csv("flight_edges.csv", col_types = "icccccccccclliiiiiiicii")
 
 #remove first column
 flight_edges = flight_edges[,2:ncol(flight_edges)]
 
-#Some months have flights flown, but no seats.  These could represent private or military
-#flights.  In either case, from an airline perspective, we are not interested in
-#these flights.  They represent ~ 10% of the data.  
-flight_data = subset(flight_edges, flight_edges$seats > 0)
-rm(flight_edges)
+#set up factor variables
+flight_edges$year = as.factor(flight_edges$year)
+flight_edges$origin_state = as.factor(flight_edges$origin_state)
+flight_edges$dest_state = as.factor(flight_edges$dest_state)
+flight_edges$origin_regn = as.factor(flight_edges$origin_regn)
+flight_edges$origin_subr = as.factor(flight_edges$origin_subr)
+flight_edges$dest_regn = as.factor(flight_edges$dest_regn)
+flight_edges$dest_subr = as.factor(flight_edges$dest_subr)
+flight_edges$intra_regn = as.factor(flight_edges$intra_regn)
+flight_edges$intra_subr = as.factor(flight_edges$intra_subr)
+flight_edges$month.chr = as.factor(flight_edges$month.chr)
 
 #sample some data, removing columns containing `city`, ICAOs, and the raw `date`
-knitr::kable(flight_data[runif(5, min = 1, max = nrow(flight_data)),-c(1:2, 3, 7, 17)])
+knitr::kable(flight_edges[runif(5, min = 1, max = nrow(flight_edges)),-c(1:3, 7, 17)])
 ```
+
+##Setup
+
+Random sampling and exploring the data has revealed two groups of observations that do not make sense, from an airline's perspective, when predicting `passengers` or `seats`:
+
+* Flights with 0 seats
+* Flights with 0 passengers
+
+###Flights with 0 seats
+
+Flights with zero seats could represent private or military flights.  From an airline's perspective, these flights should not be included when trying to predict `passengers` or `seats`.
+
+Out of 3.6M observations, `r sum(flight_edges$seats == 0)` observations have 0 seats (`r round((sum(flight_edges$seats == 0) / nrow(flight_edges)) * 100, 1)`%).
+
+```{r}
+#Remove 0-seat observations 
+flight_data = subset(flight_edges, flight_edges$seats > 0)
+```
+
+###Flights with 0 passengers
+
+Further exploration of the data has also revealed `r sum(flight_data$passengers == 0)` (out of 3.2M) observations with 0 passengers.
+
+```{r echo = FALSE}
+flight_data_0p = subset(flight_data, flight_data$passengers == 0)
+```
+
+We note that only `r round(nrow(flight_data_0p) / nrow(flight_data) * 100, 2)`% (`r nrow(flight_data_0p)`) of all reamaining 3.2M observations carried 0 passengers.  Of these zero-passenger flights, `r round((sum(flight_data_0p$dist < 500) / nrow(flight_data_0p)) * 100, 2)`% flew less than 500 miles.  In fact, the histogram confirms the logical [business] decision *not* to fly aircraft empty, if at all possible...and for shorter distances if absolutely necessary:
+
+```{r echo=FALSE, fig.height=5, fig.width=7}
+hist(flight_data_0p$dist, main = "0-Passenger Distance Histogram",
+     xlab = "Distance (miles)",
+     ylab = "Frequency",
+     col = "darkorange")
+```
+
+Airlines occasionally fly empty aircraft for maintenance purposes (for servicing at a different field), or to make an availability adjustment at an airfield where they do not have enough aircraft.  Additionally, military aircraft *will* fly 0-passenger flights (mandatory scheduled routes) where airlines *will not* fly [paid service routes] with 0 passengers.  For these reasons, it makes sense to remove the 0-passenger flights from consideration for future response transformation.
+
+```{r cache = TRUE}
+#pp ~ positive passenger values
+flight_data_pp = subset(flight_data, flight_data$passengers > 0)
+#flight_model = lm(passengers ~ seats * flights + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub_pp)
+```
+
+###Initial sampling
+
+Based on a recommendation overheard in help sessions, we decided to start modeling with a subset of 10,000 observations, without any restrictions or geographical limitation.
+
+At this point, we also remove the informational variables `origin_ICAO`, `dest_ICAO`, `origin_city`, and `dest_city`.  Additionally, since we broke out the date into `year`  and `month.chr` categorical variables, we remove `date` and `month` numeric variables as well.
+
+```{r}
+#full 3.2M observations currently stored in `flight_data_pp`
+sub_obs = 10000
+flight_sub = flight_data_pp[sample(1:nrow(flight_data_pp), sub_obs), -c(1:3, 7, 17, 19)]
+```
+
+Although not originally planned, we left `origin_state` and `dest_state` as yet another possible "region"" division.
+
+## Methods
 
 ```{r message = FALSE, echo = FALSE}
 #these libraries are required for bptest() and shapiro.test, in diagnostics function
@@ -119,7 +188,9 @@ diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, 
          xlab = "Fitted",
          ylab = "Residuals",
          main = "Fitted vs. Residuals",
-         col = pcol)
+         col = pcol, 
+         pch = 16,
+         cex = 0.35)
     abline(h = 0, col = lcol, lwd = 2)
     qqnorm(resid(model), col = pcol)
     qqline(resid(model), col = lcol)
@@ -132,17 +203,9 @@ diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, 
 }
 ```
 
-## Methods
+###Passengers vs. Month (High traffic significance?)
 
-Based on a recommendation overheard in help sessions, we decided to start modeling with a subset of 10,000 observations, without any restrictions or geographical limitation.
-
-```{r}
-#full 3.2M observations currently stored in `flight_data`
-sub_obs = 10000
-flight_sub = flight_data[sample(1:nrow(flight_data), sub_obs), ]
-```
-
-Right off the bat, we were curious to see whether `passengers` could be modeled as a response of `month` as a factor variable, verifying high-traffic seasons of flying.
+For starters, we were curious to see whether `passengers` could be modeled as a response of `month` as a factor variable, verifying high-traffic seasons of flying.
 
 ```{r}
 month_model = lm(passengers ~ month.chr, data = flight_sub)
@@ -151,81 +214,83 @@ summary(month_model, data = flight_sub)
 
 Even though the p-value of this regression (`r pf(summary(month_model)$fstatistic[1], summary(month_model)$fstatistic[2], summary(month_model)$fstatistic[3], lower.tail = FALSE)`) is significant, the simple representation did not prove very fruitful at all, with an adjusted $R^2$ of `r summary(month_model)$adj.r.squared`.  Interestingly, some of the months for which we would expect to see higher travel did have *relatively* lower p values.
 
+###Full-on additive
+
+To see which predictors may be worth including, we first formed a simple additive model considering all predictors, then passed it to AIC & BIC to get a first opinion.
+
+```{r}
+flight_model_big = lm(passengers ~ ., data = flight_sub)
+n = length(resid(flight_model_big))
+flight_model_big_bwd_aic = step(flight_model_big, direction = "backward", trace = 0)
+flight_model_big_bwd_bic = step(flight_model_big, direction = "backward", k = log(n), trace = 0)
+summary(flight_model_big_bwd_aic)$call
+summary(flight_model_big_bwd_bic)$call
+```
+
+AIC fails to eliminate the "regional" categorical variables, normally choosing 2 of the three variables `origin_state`, `dest_state`, and `intra_regn`, whilst also keeping `month.chr`.  
+
+BIC eliminates all regional categorical variables, instead preferring `month.chr` as the only categorical variable.  The smaller model may be easier to work with at first, subsequently adding region variables and testing for significance.
+
+Also of note, only BIC keeps `origin_pop` as a predictor; both usually discard `dest_pop`.
+
+###Time to get serious
+
 To get a better idea of how potential predictor variables could be reacting, we took a look at a `pairs` plot:
 
 ```{r fig.height=8, fig.width=10, cache = TRUE}
-#remove non-numerical and non-interesting columns
-pairs(flight_sub[, -c(1:12, 17, 20)], col = "dodgerblue")
+#remove non-numerical columns
+pairs(flight_sub[, -c(1:8, 13:14)], col = "dodgerblue")
 ```
 
 Obvious linear relationships exist in both `seats` and `flights`...finite amounts of seats and flights were flown domestically, and we would expect their distributions to be very similar.
 
 Also apparent is a very clear quadratic relationship between `flights` and `dist`.  This makes sense from an airline's persective as well...more flights fly short distances (saving money), while fewer flights fly longer distances.
 
-We were hoping to observe a better relationship between `passengers` and either `origin_pop` or `dest_pop`, but neither shows a distinguishable pattern in this sample.
+We were hoping to *observe* a better relationship between `passengers` and either `origin_pop` or `dest_pop`, but neither shows a distinguishable pattern in this sample.
 
 Knowing a little more about the data allowed us to form initial [large] models to pass to either AIC and/or BIC for selection:
 
 ```{r}
 #initial model best guess
-flight_model = lm(passengers ~ seats * flights + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub)
+#flight_model = lm(passengers ~ seats * flights * month.chr + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub)
+flight_model = lm(passengers ~ seats * flights * month.chr * intra_regn + origin_state + dest_state + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub)
 
-summary(flight_model)
+#summary(flight_model)
 ```
 
-The regression of our initial best guess at a model proves to be significant with a p-value of `r pf(summary(flight_model)$fstatistic[1], summary(flight_model)$fstatistic[2], summary(flight_model)$fstatistic[3], lower.tail = FALSE)`.  Both `seats` and `flights` were expected to be significant, as well as `dist^2`, as observed in the pairs plot.  The `origin_pop` and `dest_pop` were not significant on their own; but interestingly, interactions between `dist^2` and each of the population variables *was* significant.
+The regression of our initial best guess at a model proves to be significant with a p-value of `r pf(summary(flight_model)$fstatistic[1], summary(flight_model)$fstatistic[2], summary(flight_model)$fstatistic[3], lower.tail = FALSE)`.  Both `seats` and `flights` were expected to be significant, as well as `dist^2`, as observed in the pairs plot.  Also significant was `intra_regn` and the vast majority of its two-way interactions.  `origin_pop` and `dest_pop` were not significant on their own; however, the interaction between `dist^2` and `origin_pop` *was* significant.  The interaction between `dist^2` and `dest_pop` was *not* significant.  This also might explain why BIC throws out the interaction with `dest_pop`.
 
 ```{r fig.height=5, fig.width=10, echo = FALSE}
-#shapiro.test has max n of 5000, so we skip the test output for now
 diagnostics(flight_model, testit = FALSE)
 ```
 
 While it is nice to have so many significant predictors, we appear to have an issue with both homeoscedasticity and normality, confirmed by fitted vs. residuals and Q-Q plots.
 
-Random sampling and exploring of the data has also revealed `r sum(flight_data$passengers == 0)` (out of 3.2M) observations with 0 passengers, which will not bode well for response transformation.
-
-```{r echo = FALSE}
-flight_data_0p = subset(flight_data, flight_data$passengers == 0)
-flight_sub_0p = subset(flight_sub, flight_sub$passengers == 0)
-```
-
-Digging further into the data, it can be seen that only `r round(nrow(flight_data_0p) / nrow(flight_data) * 100, 2)`% (`r nrow(flight_data_0p)`) of all 3.2M observations carried 0 passengers.  Of these zero-passenger flights, `r round((sum(flight_data_0p$dist < 500) / nrow(flight_data_0p)) * 100, 2)`% flew less than 500 miles.  In fact, the histogram confirms the logical [business] decision *not* to fly aircraft empty, if at all possible...and for shorter distances if absolutely necessary:
-
-```{r echo=FALSE, fig.height=5, fig.width=7}
-hist(flight_data_0p$dist, main = "0-Passenger Distance Histogram",
-     xlab = "Distance (miles)",
-     ylab = "Frequency",
-     col = "darkorange")
-```
-
-Airlines occasionally fly empty aircraft for maintenance purposes (for servicing at a different field), or to make an availability adjustment at an airfield where they do not have enough aircraft.  Additionally, military aircraft *will* fly 0-passenger flights (mandatory scheduled routes) where airlines will not fly [paid service routes] with 0 passengers.  For these reasons, it makes sense to remove the 0-passenger flights from consideration for future response transformation.
-
-```{r cache = TRUE}
-#pp ~ positive passenger values
-flight_data_pp = subset(flight_data, flight_data$passengers > 0)
-flight_sub_pp = subset(flight_sub, flight_sub$passengers > 0)
-flight_model = lm(passengers ~ seats * flights + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub_pp)
-```
-
-We wished to perform a response variable transformation.  To determine an appropriate transformation, we ran a Box-Cox log-likelihood plot:
+We wished to perform a response variable transformation to address the clear patten in the fitted vs. residuals plot.  To determine an appropriate transformation, we ran a Box-Cox log-likelihood plot:
 
 ```{r fig.width = 7, fig.height = 5}
-boxcox(flight_model, lambda = seq(0.55, 0.68, 1/100))
+boxcox(flight_model, lambda = seq(0.50, 0.68, 1/100))
 ```
 
-For simplicity's sake, we chose a Box-Cox transformation with $\lambda = 0.60$.  
+For simplicity's sake, we chose a Box-Cox transformation with $\lambda = 0.55$.  
 
 ```{r}
-flight_model_mod = lm((passengers^0.6 - 1)/0.6 ~ seats * flights + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub_pp)
-#flight_model_mod = lm((passengers^0.6 - 1)/0.6 ~ 1, data = flight_sub_pp)
-#flight_model_mod = lm(1/passengers ~ 1, data = flight_sub_pp)
+#perform response transformation
+flight_model_mod = lm((passengers^0.55 - 1)/0.55 ~ seats * flights * month.chr * intra_regn + origin_state + dest_state + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub)
 n = length(resid(flight_model_mod))
-#flight_model_fwd_BIC = step(flight_model_mod, direction = "forward", k = log(n), scope = 1/passengers ~ seats + flights + I(dist^2) + I(origin_pop^2) + I(dest_pop^2) + seats:flights + I(dist^2):I(origin_pop^2) + I(dist^2):I(dest_pop^2) +  I(origin_pop^2):I(dest_pop^2) + I(dist^2):I(origin_pop^2):I(dest_pop^2))
-#flight_model_fwd_AIC = step(flight_model_mod, direction = "forward", scope = 1/passengers ~ seats + I(dist^2) + flights + seats:flights)
-flight_model_bwd_AIC = step(flight_model_mod, direction = "backward")
 
-diagnostics(flight_model_bwd_AIC, testit = FALSE)
-shapiro.test(sample(resid(flight_model_bwd_AIC), 5000))
-bptest(flight_model_bwd_AIC)
+#step selection
+flight_model_bwd_aic = step(flight_model_mod, direction = "backward", trace = 0)
+flight_model_bwd_bic = step(flight_model_mod, direction = "backward", k = log(n), trace = 0)
+
+summary(flight_model_bwd_aic)$call
+summary(flight_model_bwd_aic)$adj.r.squared
+summary(flight_model_bwd_bic)$call
+summary(flight_model_bwd_bic)$adj.r.squared
+
+diagnostics(flight_model_bwd_aic, testit = FALSE)
 ```
 
+While the Fitted vs. Residuals and Q-Q plots have improved dramatically, they are not quite ideal; however, they are probably as good as they are going to get, given the Box-Cox transformation we have chosen.
+
+AIC still likes holding on to `origin_state` and `dest_state`, while BIC seems happy to remove them from the model.  Both AIC & BIC retain some sort of region coding, however, as BIC keeps `intra_regn` in its model.

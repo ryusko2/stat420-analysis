@@ -83,7 +83,7 @@ The following regions will be coded as categorical predictors alongside raw data
 
 ##Cleaned Data
 
-The cleaned data (494MB) is not maintained in the repository due to size and bandwidth restrictions on github, but can be downloaded [here](https://http://ryusko2.web.engr.illinois.edu/files/flight_edges.csv).  **Please right-click and save as to prevent opening in your browser.**
+The cleaned data (494MB) is not maintained in the repository due to size and bandwidth restrictions on github, but can be downloaded [here](https://ryusko2.web.engr.illinois.edu/files/flight_edges.csv).  **Please right-click and save as to prevent opening in your browser.**
 
 A random sample is displayed below:
 
