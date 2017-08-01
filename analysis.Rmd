@@ -40,7 +40,7 @@ A summary of the raw data is presented here:
 | Origin City            | String  | Origin city name                                                                                         |
 | Destination City       | String  | Destination city name                                                                                    |
 | Passengers             | Integer | Number of passengers transported from origin to destination                                              |
-| Seats                  | Integer | Number of seats available on flights from origin to destination                                          |
+| Seats                  | Integer | Number of seats available on all flights from origin to destination                                  |
 | Flights                | Integer | Number of flights between origin and destination (multiple records for one month, many with flights > 1) |
 | Distance               | Integer | Distance (to nearest mile) flown between origin and destination                                          |
 | Fly Date               | Integer | The date (yyyymm) of flight                                                                              |
@@ -87,7 +87,7 @@ Subregions as defined by the [U.S. Census Bureau](https://www2.census.gov/geo/pd
 | Mountain (M)             | AZ, CO, ID, MT, NV, NM, UT, WY      |
 | Pacific (P)              | AK, CA, HI, OR, WA                  |
 
-\*Although Washington DC is not technically a state, it is home to two airports included in this dataset: DCA (Ronald Reagan Washington National), and IAD (Washington Dulles International).  Washington DC is in the *South Atlantic* subregion of the *South* region.
+\*Although Washington DC is not technically a state, it is home to two airports included in this dataset: DCA (Ronald Reagan Washington National), and IAD (Washington Dulles International).  Washington DC is in the **South Atlantic** subregion of the **South** region.
 
 A random sample of our [[cleaned] data](https://ryusko2.web.engr.illinois.edu/files/flight_edges.csv) (**right-click to download** ~494MB) is provided below:
 
@@ -140,7 +140,7 @@ Further exploration of the data has also revealed `r sum(flight_data$passengers 
 flight_data_0p = subset(flight_data, flight_data$passengers == 0)
 ```
 
-We note that only `r round(nrow(flight_data_0p) / nrow(flight_data) * 100, 2)`% (`r nrow(flight_data_0p)`) of all remaining 3.2M observations carried 0 passengers.  Of these zero-passenger flights, `r round((sum(flight_data_0p$dist < 500) / nrow(flight_data_0p)) * 100, 2)`% flew less than 500 miles.  In fact, the histogram confirms the logical [business] decision *not* to fly aircraft empty, if at all possible...and for shorter distances if absolutely necessary:
+We note that only `r round(nrow(flight_data_0p) / nrow(flight_data) * 100, 2)`% (`r nrow(flight_data_0p)`) of all remaining 3.2M observations carried 0 passengers.  Of these zero-passenger flights, `r round((sum(flight_data_0p$dist < 500) / nrow(flight_data_0p)) * 100, 2)`% flew less than 500 miles.  In fact, the histogram confirms the logical [business] decision **not** to fly aircraft empty, if at all possible...and for shorter distances if absolutely necessary:
 
 ```{r echo=FALSE, fig.height=5, fig.width=7}
 hist(flight_data_0p$dist, main = "0-Passenger Distance Histogram",
@@ -149,7 +149,7 @@ hist(flight_data_0p$dist, main = "0-Passenger Distance Histogram",
      col = "darkorange")
 ```
 
-Airlines occasionally fly empty aircraft for maintenance purposes (for servicing at a different field), or to make an availability adjustment at an airfield where they do not have enough aircraft.  Additionally, military aircraft *will* fly 0-passenger flights (mandatory scheduled routes) where airlines *will not* fly [paid service routes] with 0 passengers.  For these reasons, it makes sense to remove the 0-passenger flights from consideration for future response transformation.
+Airlines occasionally fly empty aircraft for maintenance purposes (for servicing at a different field), or to make an availability adjustment at an airfield where they do not have enough aircraft.  Additionally, military aircraft **will** fly 0-passenger flights (mandatory scheduled routes) where airlines **will not** fly [paid service routes] with 0 passengers.  For these reasons, it makes sense to remove the 0-passenger flights from consideration for future response transformation.
 
 ```{r cache = TRUE}
 #pp ~ positive passenger values
@@ -344,7 +344,7 @@ Obvious linear relationships exist in both `seats` and `flights`...finite amount
 
 Also apparent is a very clear quadratic relationship between `flights` and `dist`.  This makes sense from an airline's perspective as well...more flights fly short distances (saving money), while fewer flights fly longer distances.
 
-We were hoping to *observe* a better relationship between `passengers` and either `origin_pop` or `dest_pop`, but neither shows a distinguishable pattern in this sample.
+We were hoping to **observe** a better relationship between `passengers` and either `origin_pop` or `dest_pop`, but neither shows a distinguishable pattern in this sample.
 
 Knowing a little more about the data allowed us to form initial [large] models to pass to `step()` using either AIC and/or BIC for selection:
 
@@ -363,7 +363,7 @@ summary(flight_model_best_guess)$call
 
 ```
 
-The regression of our initial best guess at a model proves to be significant with a p-value of `r pf(summary(flight_model_best_guess)$fstatistic[1], summary(flight_model_best_guess)$fstatistic[2], summary(flight_model_best_guess)$fstatistic[3], lower.tail = FALSE)`.  Both `seats` and `flights` were expected to be significant, as well as `dist^2`, as observed in the pairs plot.  Also significant was `intra_regn` and the vast majority of its two-way interactions.  `origin_pop` and `dest_pop` were not significant on their own; however, the interaction between `dist^2` and `origin_pop` *was* significant.  The interaction between `dist^2` and `dest_pop` was *not* significant.  This also might explain why BIC throws out the interaction with `dest_pop`.
+The regression of our initial best guess at a model proves to be significant with a p-value of `r pf(summary(flight_model_best_guess)$fstatistic[1], summary(flight_model_best_guess)$fstatistic[2], summary(flight_model_best_guess)$fstatistic[3], lower.tail = FALSE)`.  Both `seats` and `flights` were expected to be significant, as well as `dist^2`, as observed in the pairs plot.  Also significant was `intra_regn` and the vast majority of its two-way interactions.  `origin_pop` and `dest_pop` were not significant on their own; however, the interaction between `dist^2` and `origin_pop` **was** significant.  The interaction between `dist^2` and `dest_pop` was **not** significant.  This also might explain why BIC throws out the interaction with `dest_pop`.
 
 *Model validation:*
 
@@ -543,11 +543,108 @@ flight_model_int_bwd_bic | `r summary(flight_model_int_bwd_bic)$adj.r.squared` |
 
 
 
+### Forward Search
+
+We also attempted to do a stepwise forward search which `R` usually picks the exact same model as in the backward stepwise search. Not shown, but a `"both"` stepwise search also arrives at the same model.
+
+```{r}
+#Start with no predictors
+flight_model_fwd = lm(passengers ~ 1, data = flight_sub_train)
+
+n = nrow(flight_sub_train)
+
+#step selection
+flight_model_int_fwd_aic = step(flight_model_fwd, 
+                                scope = passengers ~ origin_state + origin_regn + origin_subr + 
+                                                     dest_state +   dest_regn +   dest_subr + 
+                                                     intra_regn + intra_subr + seats * flights + 
+                                                     dist + I(dist ^2) + year + month.chr +
+                                                     origin_pop + dest_pop,
+                                direction = "forward", trace = 0)
+
+flight_model_int_fwd_bic = step(flight_model_fwd,
+                                scope = passengers ~ origin_state + origin_regn + origin_subr + 
+                                                     dest_state +   dest_regn +   dest_subr + 
+                                                     intra_regn + intra_subr + seats * flights + 
+                                                     dist + I(dist ^2) + year + month.chr +
+                                                     origin_pop + dest_pop,
+                                direction = "forward", k = log(n), trace = 0)
+
+#Evaluate these models.
+
+#We get a warning from predic(flight_model_int) about using a rank-deficient fit, so
+#we will skip evaluating this model and use the step() selected models.
+
+train_rmse_int_fwd_aic = calc_rmse(resid(flight_model_int_fwd_aic))
+
+test_rmse_int_fwd_aic  = calc_rmse(flight_sub_test$passengers -
+                                   predict(flight_model_int_fwd_aic, flight_sub_test))
+
+train_rmse_int_fwd_bic = calc_rmse(resid(flight_model_int_fwd_bic))
+
+test_rmse_int_fwd_bic  = calc_rmse(flight_sub_test$passengers -
+                                   predict(flight_model_int_fwd_bic, flight_sub_test))
+
+#List results
+summary(flight_model_int_bwd_aic)$call
+summary(flight_model_int_bwd_bic)$call
+
+```
+
+*Model validation:*
+
+model (passengers response) | adj.r.squared | train RMSE | test RMSE
+------|---------------|------------|------------|-----------
+flight_model_seats_flights | `r summary(flight_model_seats_flights)$adj.r.squared` | `r train_rmse_seats_flights` | `r test_rmse_seats_flights`
+flight_model_big_bwd_aic | `r summary(flight_model_big_bwd_aic)$adj.r.squared` | `r train_rmse_big_bwd_aic` | `r test_rmse_big_bwd_aic`
+flight_model_big_bwd_bic | `r summary(flight_model_big_bwd_bic)$adj.r.squared` | `r train_rmse_big_bwd_bic` | `r test_rmse_big_bwd_bic`
+flight_model_best_guess | `r summary(flight_model_best_guess)$adj.r.squared` | `r train_rmse_best_guess` | `r test_rmse_best_guess`
+flight_model_box | `r summary(flight_model_box)$adj.r.squared` | `r train_rmse_box` | `r test_rmse_box`
+flight_model_int_bwd_aic | `r summary(flight_model_int_bwd_aic)$adj.r.squared` | `r train_rmse_int_bwd_aic` | `r test_rmse_int_bwd_aic`
+flight_model_int_bwd_bic | `r summary(flight_model_int_bwd_bic)$adj.r.squared` | `r train_rmse_int_bwd_bic` | `r test_rmse_int_bwd_bic`
+flight_model_int_fwd_aic | `r summary(flight_model_int_fwd_aic)$adj.r.squared` | `r train_rmse_int_fwd_aic` | `r test_rmse_int_fwd_aic`
+flight_model_int_fwd_bic | `r summary(flight_model_int_fwd_bic)$adj.r.squared` | `r train_rmse_int_fwd_bic` | `r test_rmse_int_fwd_bic`
+
+
 
 ## Results
 
+This dataset representing all US domestic flights from 1990 to 2009 has over 3 million records, which is largely about moving `passengers`. We explored the data in multiple ways with our primary focus on predicting `passengers`. Although the data contains several numerical and categorical predictors, what has the largest influence on predicting `passengers` is the `seats` available and the number of `flights`. This is not surprising as airlines seek to fill all `seats`. Having pricing information would have make exploring this space much more interesting.
+
+The small model that **explains** `passengers` in its easiest form is estimated from this sample as:
+
+$$
+passengers =  `r coef(flight_model_seats_flights)[1]` + `r coef(flight_model_seats_flights)[2]` * seats + `r coef(flight_model_seats_flights)[3]` * flights
+$$
+The regression shows that the more `seats` that are available between two points, the more `passengers` there are, however, the more `flights` there are between, reduces the `passengers`. Presumably having more `flights` makes for a larger opportunity to have empty seats. Using the adjusted $R^2$ value, this simple model explains about `r summary(flight_model_seats_flights)$adj.r.squared` of `passengers`. 
+
+The model that predicts `passengers` the best is a complex model (`flight_model_int_bwd_aic`) that includes 51 levels for `origin_state`, 51 levels for `dest_state`, 20 levels for `year` and 12 levels for `month.chr`. Having all these beta parameters makes this much harder to explain, but it does consistently predict best on the test dataset. We tried several different training/test set samples and `flight_model_int_bwd_aic` consistently provided the best prediction as measured by the root mean square error (RMSE). However, the gain in prediction accuracy doesn't appear to be very large as shown in the following table comparing the simple model to the complex model, due to `seats` and `flights` already explaining most of `passengers`.
+
+model (passengers response) | adj.r.squared | train RMSE | test RMSE
+------|---------------|------------|------------|-----------
+flight_model_seats_flights | `r summary(flight_model_seats_flights)$adj.r.squared` | `r train_rmse_seats_flights` | `r test_rmse_seats_flights`
+flight_model_int_bwd_aic | `r summary(flight_model_int_bwd_aic)$adj.r.squared` | `r train_rmse_int_bwd_aic` | `r test_rmse_int_bwd_aic`
+
+Model `flight_model_int_bwd_aic` was arrived at with a backwards stepwise search starting with all predictors and included an interaction between `seats` and `flights` and a quadratic term for `dist` which is clearly seen in the pairs plot given above. AIC was the metric used to select predictors. The same model was also arrived at with a forward search using AIC as well as a forward/backward stepwise search.
+
+Our chosen model is fully listed here:
+
+```{r}
+summary(flight_model_int_bwd_aic)
+```
+
+Since the simple `flight_model_seats_flights` is nested in `flight_model_int_bwd_aic` we can use an ANOVA F-test to test for significance.
+
+```{r}
+(t1 = anova(flight_model_seats_flights, flight_model_int_bwd_aic))
+```
+
+Which is statistically significant with a p-value of `r t1$"Pr(>F)"[2]`, making this the best model we could find to predict `passengers`.
+
+
 
 ## Discussion
+
 
 
 ## Appendix
@@ -555,7 +652,7 @@ flight_model_int_bwd_bic | `r summary(flight_model_int_bwd_bic)$adj.r.squared` |
 ### Alternate Data Analysis Notes 
 
 - `Passengers`, `Seats` and `Flights` are so hightly correlated that using `Seats` or `Flights` as the response variable did not add anything to the data analysis.
-- We were hoping to *observe* a better relationship between `passengers` and either `origin_pop` or `dest_pop`, but neither shows a distinguishable pattern in this sample.
+- We were hoping to **observe** a better relationship between `passengers` and either `origin_pop` or `dest_pop`, but neither shows a distinguishable pattern in this sample.
 
 
 
