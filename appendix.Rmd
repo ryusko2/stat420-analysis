@@ -1,0 +1,160 @@
+---
+title: "appendix"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r cache = TRUE}
+flight_edges = readr::read_csv("flight_edges.csv", col_types = "icccccccccclliiiiiiicii")
+
+#remove first column
+flight_edges = flight_edges[,2:ncol(flight_edges)]
+
+#Some months have flights flown, but no seats.  These could represent private or military
+#flights.  In either case, from an airline perspective, we are not interested in
+#these flights.  They represent ~ 10% of the data.  
+flight_data = subset(flight_edges, flight_edges$seats > 0)
+rm(flight_edges)
+
+#sample some data, removing columns containing `city`, ICAOs, and the raw `date`
+knitr::kable(flight_data[runif(5, min = 1, max = nrow(flight_data)),-c(1:2, 3, 7, 17)])
+```
+
+```{r message = FALSE, echo = FALSE}
+#these libraries are required for bptest() and shapiro.test, in diagnostics function
+library(lmtest)
+library(MASS)
+
+#diagnostics function
+diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, plotit = TRUE, testit = TRUE) {
+  if(plotit == TRUE) {
+    par(mfrow = c(1,2))
+    plot(fitted(model), resid(model),
+         xlab = "Fitted",
+         ylab = "Residuals",
+         main = "Fitted vs. Residuals",
+         col = pcol)
+    abline(h = 0, col = lcol, lwd = 2)
+    qqnorm(resid(model), col = pcol)
+    qqline(resid(model), col = lcol)
+  }
+  if(testit == TRUE) {
+    shapiro_wilk = shapiro.test(resid(model))
+    breusch_pagan = bptest(model)
+    list(shapiro_wilk = shapiro_wilk, breusch_pagan = breusch_pagan)
+  }
+}
+```
+
+```{r}
+sub_obs = 10000
+flight_sub = flight_data[sample(1:nrow(flight_data), sub_obs), ]
+```
+
+
+```{r}
+pairs(flight_sub[, -c(1:12, 17, 20)], col = "dodgerblue")
+```
+
+Below, I am starting off with a model that uses seats as an alternative response and then let AIC or BIC choose the best model. The model that I have started off with has an interaction between passengers and flights because I feel that the number of seats is dependent on the number of passengers and the number of flights. I have also chosen polynomial terms of passengers and flights because even though the correlation scatter plot shows that it is linear, I was curious to see whether AIC or BIC would choose these terms. I chose the polynomial terms of dist, date, origin_pop, dest_pop due to the way the graph looks in the correlation scatter plot.  
+```{r eval=FALSE}
+flight_model_big = lm(seats ~ . + passengers * flights + I(passengers^2) + I(flights^2) + I(dist^2) + I(date^2) + I(origin_pop^2) + I(dest_pop^2), data = flight_sub)
+n = length(resid(flight_model_big))
+flight_model_big_bwd_aic = step(flight_model_big, direction = "backward", trace = 0)
+flight_model_big_bwd_bic = step(flight_model_big, direction = "backward", k = log(n), trace = 0)
+summary(flight_model_big_bwd_aic)$call
+summary(flight_model_big_bwd_bic)$call
+```
+
+After using the backward search and BIC, we get the below model and now we are checking for whether the assumptions of normality and constant variance are still valid. Interestingly, BIC has chosen the model with the polynomial terms of passengers and flights. 
+
+```{r}
+flight_model_final = lm(seats ~ passengers + flights + dist + date + month.chr + origin_pop + dest_pop + I(passengers^2) + I(flights^2) + I(dist^2) + passengers * flights, data = flight_sub)
+
+summary(flight_model_final)
+diagnostics(flight_model_final, testit = FALSE)
+shapiro.test(sample(resid(flight_model_final), 5000))
+bptest(flight_model_final)
+```
+
+From this, we see that constant variance and normality are suspect. 
+We then try to transform the response by using the box-cox method: 
+
+```{r}
+boxcox(flight_model_final, lambda = seq(0.55, 0.68, 1/100))
+```
+
+From this, we will use 0.65 as $\lambda$
+```{r}
+flight_model_final_box = lm((seats^0.65 - 1)/0.65 ~ passengers + flights + dist + date + month.chr + origin_pop + dest_pop + I(passengers^2) + I(flights^2), data = flight_sub)
+
+summary(flight_model_final_box)
+diagnostics(flight_model_final_box, testit = FALSE)
+shapiro.test(sample(resid(flight_model_final_box), 5000))
+bptest(flight_model_final_box)
+```
+
+From this we see that constant variance might be suspect but the assumption of normality is not suspect. 
+
+Below, we are trying to see whether flights is a better response than compared to seats and passengers. Again we will use backward search and BIC to find the best model. I started off with the below model which has an interaction term between passengers and seats because again, the number of flights is dependent on the the number of passengers and seats.  Also, I selected the polynomial terms of passengers and seats to once again see whether AIC or BIC would choose them. The rest of the polynomial terms was to see whether they would be better at predicting the number of flights. 
+
+```{r eval=FALSE}
+flight_model_big = lm(flights ~ . + I(intra_subr^2) + I(passengers^2) + I(seats^2) + I(dist^2) + I(date^2) + passengers * seats, data = flight_sub)
+n = length(resid(flight_model_big))
+flight_model_big_bwd_aic = step(flight_model_big, direction = "backward", trace = 0)
+flight_model_big_bwd_bic = step(flight_model_big, direction = "backward", k = log(n), trace = 0)
+ssummary(flight_model_big_bwd_aic)$call
+summary(flight_model_big_bwd_bic)$call
+```
+
+Based on backward search and BIC, we have come up with the below model. We are also removing the rows where the number of flights are less than or equal to 0. It is interesting to note that again even though flights, passengers and seats have a linear relationship, AIC and BIC both choose the square of passengers and seats. 
+
+```{r}
+flight_sub_pp = subset(flight_sub, flight_sub$flights > 0)
+flight_model_final = lm(flights ~ passengers + seats + dist + date + I(passengers^2) + I(seats^2) + I(dist^2) + passengers*seats, data = flight_sub_pp)
+
+summary(flight_model_final)
+diagnostics(flight_model_final, testit = FALSE)
+shapiro.test(sample(resid(flight_model_final), 5000))
+bptest(flight_model_final)
+```
+
+From the diagnostic tests, we can see that the assumption of normality and constant variance is suspect. 
+
+We will try to transform the response using the box-cox method. 
+```{r}
+boxcox(flight_model_final, lambda = seq(0.3, 0.4, 1/100))
+```
+
+Based on the graph, we will use $\lambda$ = 0.3
+```{r}
+flight_model_final_box = lm((seats^0.3 - 1)/0.3 ~ passengers + seats + dist + date + I(passengers^2) + I(seats^2) + I(dist^2) + passengers*seats, data = flight_sub_pp)
+
+summary(flight_model_final_box)
+diagnostics(flight_model_final_box, testit = FALSE)
+shapiro.test(sample(resid(flight_model_final_box), 5000))
+bptest(flight_model_final_box)
+```
+
+Based on the tests, we still suspect that constant variance is violated. However,  based on the Q-Q plot, normality may not be suspect. 
+
+
+```{r}
+flight_model_passengers = lm(passengers ~ seats * flights + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub)
+flight_model_seats = lm(seats ~ passengers + flights + dist + date + month.chr + origin_pop + dest_pop + I(passengers^2) + I(flights^2) + I(dist^2) + passengers * flights, data = flight_sub)
+flight_model_flights = lm(flights ~ passengers + seats + dist + date + I(passengers^2) + I(seats^2) + I(dist^2) + passengers*seats, data = flight_sub_pp)
+```
+
+```{r}
+par(mfrow = c(1, 3))
+hist(fitted(flight_model_passengers))
+hist(fitted(flight_model_seats))
+hist(fitted(flight_model_flights))
+```
+
+From the above histogram, we can see that the distribution of the fitted values with different response variables are very similar. We can attribute this to the fact that passengers, seats, and flights are correlated. 
+
+
