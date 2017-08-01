@@ -591,7 +591,9 @@ summary(flight_model_int_bwd_bic)$call
 
 ```
 
-*Model validation:*
+## Results
+
+Here is summary of how well the models perform on the test dataset.
 
 model (passengers response) | adj.r.squared | train RMSE | test RMSE
 ------|---------------|------------|------------|-----------
@@ -600,16 +602,29 @@ flight_model_big_bwd_aic | `r summary(flight_model_big_bwd_aic)$adj.r.squared` |
 flight_model_big_bwd_bic | `r summary(flight_model_big_bwd_bic)$adj.r.squared` | `r train_rmse_big_bwd_bic` | `r test_rmse_big_bwd_bic`
 flight_model_best_guess | `r summary(flight_model_best_guess)$adj.r.squared` | `r train_rmse_best_guess` | `r test_rmse_best_guess`
 flight_model_box | `r summary(flight_model_box)$adj.r.squared` | `r train_rmse_box` | `r test_rmse_box`
-flight_model_int_bwd_aic | `r summary(flight_model_int_bwd_aic)$adj.r.squared` | `r train_rmse_int_bwd_aic` | `r test_rmse_int_bwd_aic`
+flight_model_box_bwd_aic | `r summary(flight_model_box_bwd_aic)$adj.r.squared` | `r train_rmse_box_bwd_aic` | `r test_rmse_box_bwd_aic`
+flight_model_box_bwd_bic | `r summary(flight_model_box_bwd_bic)$adj.r.squared` | `r train_rmse_box_bwd_bic` | `r test_rmse_box_bwd_bic`
+**flight_model_int_bwd_aic** | `r summary(flight_model_int_bwd_aic)$adj.r.squared` | `r train_rmse_int_bwd_aic` | **`r test_rmse_int_bwd_aic`**
 flight_model_int_bwd_bic | `r summary(flight_model_int_bwd_bic)$adj.r.squared` | `r train_rmse_int_bwd_bic` | `r test_rmse_int_bwd_bic`
 flight_model_int_fwd_aic | `r summary(flight_model_int_fwd_aic)$adj.r.squared` | `r train_rmse_int_fwd_aic` | `r test_rmse_int_fwd_aic`
 flight_model_int_fwd_bic | `r summary(flight_model_int_fwd_bic)$adj.r.squared` | `r train_rmse_int_fwd_bic` | `r test_rmse_int_fwd_bic`
 
+Our chosen model is `flight_model_int_bwd_aic` based on having a good adjusted $R^2$ and consistently having the best root mean squared error (RMSE) on the test dataset. It's a complex model summarized here:
+
+```{r}
+summary(flight_model_int_bwd_aic)
+```
+
+Although our chosen model makes the best predictions, it does violate assumptions of normality and homoscedasticity.
+
+```{r}
+diagnostics(flight_model_int_bwd_aic, testit = FALSE)
+```
 
 
-## Results
+## Discussion
 
-This dataset representing all US domestic flights from 1990 to 2009 has over 3 million records, which is largely about moving `passengers`. We explored the data in multiple ways with our primary focus on predicting `passengers`. Although the data contains several numerical and categorical predictors, what has the largest influence on predicting `passengers` is the `seats` available and the number of `flights`. This is not surprising as airlines seek to fill all `seats`. Having pricing information would have make exploring this space much more interesting.
+This dataset representing all US domestic flights from 1990 to 2009 has over 3 million records, which is largely about moving `passengers`. We explored the data in multiple ways with our primary focus on predicting `passengers`. Although the data contains several numerical and categorical predictors, what has the largest influence on predicting `passengers` is the `seats` available and the number of `flights`. This is not surprising as airlines seek to fill all `seats`. Having pricing information would have made exploring this space much more interesting.
 
 The small model that **explains** `passengers` in its easiest form is estimated from this sample as:
 
@@ -625,13 +640,9 @@ model (passengers response) | adj.r.squared | train RMSE | test RMSE
 flight_model_seats_flights | `r summary(flight_model_seats_flights)$adj.r.squared` | `r train_rmse_seats_flights` | `r test_rmse_seats_flights`
 flight_model_int_bwd_aic | `r summary(flight_model_int_bwd_aic)$adj.r.squared` | `r train_rmse_int_bwd_aic` | `r test_rmse_int_bwd_aic`
 
-Model `flight_model_int_bwd_aic` was arrived at with a backwards stepwise search starting with all predictors and included an interaction between `seats` and `flights` and a quadratic term for `dist` which is clearly seen in the pairs plot given above. AIC was the metric used to select predictors. The same model was also arrived at with a forward search using AIC as well as a forward/backward stepwise search.
+Model `flight_model_int_bwd_aic` was arrived at with a backwards stepwise search starting with all predictors and included an interaction between `seats` and `flights` and a quadratic term for `dist` which is clearly seen in the pairs plot given above. AIC was the metric used to select predictors. The same model was also arrived at with a forward search using AIC as well as a forward/backward stepwise search. Searching with the BIC criteria did not yield models that tested as well.
 
-Our chosen model is fully listed here:
-
-```{r}
-summary(flight_model_int_bwd_aic)
-```
+What is interesting about the AIC backwards search is that it kept most of the numeric predictors but discarded the `origin_pop`. The search did find `dest_pop` was significant. The search also discarded the regional predictors we added initially with the intention of reducing complexity of the model. We never attempted to fit a model with the origin / destination cities. What we learned while testing models is the training dataset must have all factor levels present in order to make predictions on unseen test data. That would be a hard sample to make. The AIC search also found that the flight date (month, year) was significant for making predictions.
 
 Since the simple `flight_model_seats_flights` is nested in `flight_model_int_bwd_aic` we can use an ANOVA F-test to test for significance.
 
@@ -639,12 +650,15 @@ Since the simple `flight_model_seats_flights` is nested in `flight_model_int_bwd
 (t1 = anova(flight_model_seats_flights, flight_model_int_bwd_aic))
 ```
 
-Which is statistically significant with a p-value of `r t1$"Pr(>F)"[2]`, making this the best model we could find to predict `passengers`.
+`flight_model_int_bwd_aic` is statistically significant with a p-value of `r t1$"Pr(>F)"[2]`, making this the best model we could find to predict `passengers`.
 
 
 
-## Discussion
+>> How is your final model useful?
 
+>> Discuss linear regression assumptions and what it means to choose a model that violates them
+
+>> With collinearity, variance is much higher, but doesn't have a hugh effect on prediction
 
 
 ## Appendix
