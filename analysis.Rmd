@@ -381,7 +381,7 @@ Although our educated best guess produced a model that fit the training data sam
 diagnostics(flight_model_best_guess, testit = FALSE)
 ```
 
-While it is nice to have so many significant predictors, we appear to have an issue with both homeoscedasticity and normality, confirmed by fitted vs. residuals and Q-Q plots.
+While it is nice to have so many significant predictors, we appear to have an issue with both homoscedasticity and normality, confirmed by fitted vs. residuals and Q-Q plots.
 
 We wished to perform a response variable transformation to address the clear pattern in the fitted vs. residuals plot.  To determine an appropriate transformation, we ran a Box-Cox log-likelihood plot:
 
@@ -415,42 +415,42 @@ In the sampled dataset, the range of passengers is `r min_pass` to `r max_pass`.
 
 ```{r}
 #perform response transformation
-flight_model_mod = lm((passengers ^ lambda - 1) / lambda ~ 
+flight_model_box = lm((passengers ^ lambda - 1) / lambda ~ 
                        seats * flights * month.chr * intra_regn + 
                        origin_state + dest_state + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), 
                        data = flight_sub_train)
-n = length(resid(flight_model_mod))
+n = length(resid(flight_model_box))
 
 #step selection
-flight_model_mod_bwd_aic = step(flight_model_mod, direction = "backward", trace = 0)
-flight_model_mod_bwd_bic = step(flight_model_mod, direction = "backward", k = log(n), trace = 0)
+flight_model_box_bwd_aic = step(flight_model_box, direction = "backward", trace = 0)
+flight_model_box_bwd_bic = step(flight_model_box, direction = "backward", k = log(n), trace = 0)
 
 #Evaluate these models. Since the predictions are in the Box-Cox transformed units,
 #we need to transform back for comparison with other models.
 
-train_rmse_mod = calc_rmse(flight_sub_train$passengers -
-                           reverse_transform(predict(flight_model_mod)))
+train_rmse_box = calc_rmse(flight_sub_train$passengers -
+                           reverse_transform(predict(flight_model_box)))
 
-test_rmse_mod  = calc_rmse(flight_sub_test$passengers -
-                           reverse_transform(predict(flight_model_mod, flight_sub_test)))
+test_rmse_box  = calc_rmse(flight_sub_test$passengers -
+                           reverse_transform(predict(flight_model_box, flight_sub_test)))
 
-train_rmse_mod_bwd_aic = calc_rmse(flight_sub_train$passengers -
-                                   reverse_transform(predict(flight_model_mod_bwd_aic)))
+train_rmse_box_bwd_aic = calc_rmse(flight_sub_train$passengers -
+                                   reverse_transform(predict(flight_model_box_bwd_aic)))
 
-test_rmse_mod_bwd_aic  = calc_rmse(flight_sub_test$passengers -
-                               reverse_transform(predict(flight_model_mod_bwd_aic, flight_sub_test)))
+test_rmse_box_bwd_aic  = calc_rmse(flight_sub_test$passengers -
+                               reverse_transform(predict(flight_model_box_bwd_aic, flight_sub_test)))
 
-train_rmse_mod_bwd_bic = calc_rmse(flight_sub_train$passengers -
-                                   reverse_transform(predict(flight_model_mod_bwd_bic)))
+train_rmse_box_bwd_bic = calc_rmse(flight_sub_train$passengers -
+                                   reverse_transform(predict(flight_model_box_bwd_bic)))
 
-test_rmse_mod_bwd_bic  = calc_rmse(flight_sub_test$passengers -
-                                   reverse_transform(predict(flight_model_mod_bwd_bic, flight_sub_test)))
+test_rmse_box_bwd_bic  = calc_rmse(flight_sub_test$passengers -
+                                   reverse_transform(predict(flight_model_box_bwd_bic, flight_sub_test)))
 
 #List results
-summary(flight_model_mod_bwd_aic)$call
-summary(flight_model_mod_bwd_bic)$call
+summary(flight_model_box_bwd_aic)$call
+summary(flight_model_box_bwd_bic)$call
 
-diagnostics(flight_model_mod_bwd_aic, testit = FALSE)
+diagnostics(flight_model_box_bwd_aic, testit = FALSE)
 ```
 
 While the Fitted vs. Residuals and Q-Q plots have improved dramatically, they are not quite ideal; however, they are probably as good as they are going to get, given the Box-Cox transformation we have chosen.
@@ -466,9 +466,9 @@ flight_model_seats_flights | `r summary(flight_model_seats_flights)$adj.r.square
 flight_model_big_bwd_aic | `r summary(flight_model_big_bwd_aic)$adj.r.squared` | `r train_rmse_big_bwd_aic` | `r test_rmse_big_bwd_aic`
 flight_model_big_bwd_bic | `r summary(flight_model_big_bwd_bic)$adj.r.squared` | `r train_rmse_big_bwd_bic` | `r test_rmse_big_bwd_bic`
 flight_model_best_guess | `r summary(flight_model_best_guess)$adj.r.squared` | `r train_rmse_best_guess` | `r test_rmse_best_guess`
-flight_model_mod | `r summary(flight_model_mod)$adj.r.squared` | `r train_rmse_mod` | `r test_rmse_mod`
-flight_model_mod_bwd_aic | `r summary(flight_model_mod_bwd_aic)$adj.r.squared` | `r train_rmse_mod_bwd_aic` | `r test_rmse_mod_bwd_aic`
-flight_model_mod_bwd_bic | `r summary(flight_model_mod_bwd_bic)$adj.r.squared` | `r train_rmse_mod_bwd_bic` | `r test_rmse_mod_bwd_bic`
+flight_model_box | `r summary(flight_model_box)$adj.r.squared` | `r train_rmse_box` | `r test_rmse_box`
+flight_model_box_bwd_aic | `r summary(flight_model_box_bwd_aic)$adj.r.squared` | `r train_rmse_box_bwd_aic` | `r test_rmse_box_bwd_aic`
+flight_model_box_bwd_bic | `r summary(flight_model_box_bwd_bic)$adj.r.squared` | `r train_rmse_box_bwd_bic` | `r test_rmse_box_bwd_bic`
 
 However, as shown in the above model validation table, while this Box-Cox transformed model has improved normality and equal variance assumptions, it is has more errors in it's mean predictions and appears to have overfit the data. We tried an additional variety of predictors, with and without interactions, with and without quadratics, but could not find a model with a Box-Cox translated response that performed well on this sample.
 
@@ -476,12 +476,12 @@ However, as shown in the above model validation table, while this Box-Cox transf
 ### Looking at influential observations
 
 ```{r, warning=FALSE}
-n = length(resid(flight_model_mod_bwd_aic))
+n = length(resid(flight_model_box_bwd_aic))
 
-percent = sum(cooks.distance(flight_model_mod_bwd_aic) >
-              (4 / length(cooks.distance(flight_model_mod_bwd_aic))), na.rm = TRUE) / n * 100
+percent = sum(cooks.distance(flight_model_box_bwd_aic) >
+              (4 / length(cooks.distance(flight_model_box_bwd_aic))), na.rm = TRUE) / n * 100
 
-plot(flight_model_mod_bwd_aic, which = 6)
+plot(flight_model_box_bwd_aic, which = 6)
 
 
 ```
@@ -491,11 +491,11 @@ About `r percent`% of the training dataset are influential observations accordin
 
 ### Simple Interactive Model
 
-Our best model so far as been the `flight_model_big_bwd_aic` which started with all predictors and then used a backwards search using an AIC criteria for selecting $\beta$ parameters. We will start back with that model and add an interaction between the highly correlated `seats` and `flights`.
+Our best model so far has been the `flight_model_big_bwd_aic` which started with all predictors and then used a backwards search using an AIC criteria for selecting $\beta$ parameters. We will start back with that model and add an interaction between the highly correlated `seats` and `flights` and recognize that `dist` has a quadratic relationship with `passengers`.
 
 ```{r}
-#All predictors plus and interaction between seats and flights
-flight_model_int = lm(passengers ~ . + seats * flights, data = flight_sub_train)
+#All predictors plus and interaction between seats and flights and dist squared
+flight_model_int = lm(passengers ~ . + seats * flights + I(dist ^ 2), data = flight_sub_train)
 
 n = length(resid(flight_model_int))
 
@@ -526,6 +526,8 @@ diagnostics(flight_model_int_bwd_aic, testit = FALSE)
 
 ```
 
+This mode is statistically significant with a p-value of (`r pf(summary(flight_model_int_bwd_aic)$fstatistic[1], summary(flight_model_int_bwd_aic)$fstatistic[2], summary(flight_model_int_bwd_aic)$fstatistic[3], lower.tail = FALSE)`). The model does appear to violate assumptions of normality and homoscedasticity, but also makes a much better prediction than the Box-Cox translated model.
+
 
 *Model validation:*
 
@@ -535,9 +537,11 @@ flight_model_seats_flights | `r summary(flight_model_seats_flights)$adj.r.square
 flight_model_big_bwd_aic | `r summary(flight_model_big_bwd_aic)$adj.r.squared` | `r train_rmse_big_bwd_aic` | `r test_rmse_big_bwd_aic`
 flight_model_big_bwd_bic | `r summary(flight_model_big_bwd_bic)$adj.r.squared` | `r train_rmse_big_bwd_bic` | `r test_rmse_big_bwd_bic`
 flight_model_best_guess | `r summary(flight_model_best_guess)$adj.r.squared` | `r train_rmse_best_guess` | `r test_rmse_best_guess`
-flight_model_mod | `r summary(flight_model_mod)$adj.r.squared` | `r train_rmse_mod` | `r test_rmse_mod`
+flight_model_box | `r summary(flight_model_box)$adj.r.squared` | `r train_rmse_box` | `r test_rmse_box`
 flight_model_int_bwd_aic | `r summary(flight_model_int_bwd_aic)$adj.r.squared` | `r train_rmse_int_bwd_aic` | `r test_rmse_int_bwd_aic`
 flight_model_int_bwd_bic | `r summary(flight_model_int_bwd_bic)$adj.r.squared` | `r train_rmse_int_bwd_bic` | `r test_rmse_int_bwd_bic`
+
+
 
 
 ## Results
