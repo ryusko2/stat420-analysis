@@ -13,7 +13,6 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 options(scipen = 1, digits = 4, width = 80)
-
 ```
 
 
@@ -123,7 +122,7 @@ Random sampling and exploring the data has revealed two groups of observations t
 
 ###Flights with 0 seats
 
-Flights with zero seats could represent private or military flights.  From an airline's perspective, these flights should not be included when trying to predict `passengers` or `seats`.
+Flights with zero seats could represent private, military, or cargo flights.  From an airline's perspective, these flights should not be included when trying to predict `passengers` or `seats`.
 
 Out of 3.6M observations, `r sum(flight_edges$seats == 0)` observations have 0 seats (`r round((sum(flight_edges$seats == 0) / nrow(flight_edges)) * 100, 1)`%).
 
@@ -158,9 +157,9 @@ flight_data_pp = subset(flight_data, flight_data$passengers > 0)
 
 ###Initial sampling
 
-Based on a recommendation overheard in help sessions, we initially began modeling with 10,000 observations, without any restrictions or geographical limitation.  Later in our analysis, we realized that in order to include all factors in our sampling, we increased our sample size to 20,000 observations, to aid in capturing every level of specific factor variables present in this dataset.
+We initially began modeling with a sample size of 10,000 observations, without any restrictions or geographical limitation.  Later in our analysis, we realized that in order to include all factors in our sampling, we increased our sample size to 20,000 observations, to aid in capturing every level of specific factor variables present in this dataset.
 
-Before analyzing, we also removed the informational variables `origin_ICAO`, `dest_ICAO`, `origin_city`, and `dest_city`.  Additionally, since we broke out the date into `year`  and `month.chr` categorical variables, we removed `date` and `month` numeric variables as well.
+Before analyzing, we also removed the largely informational variables `origin_ICAO`, `dest_ICAO`, `origin_city`, and `dest_city`.  Additionally, since we broke out the date into `year`  and `month.chr` categorical variables, we removed `date` and `month` numeric variables as well.
 
 Although we coded regions to reduce the complexity of the full dataset, we decided as well to leave `origin_state` and `dest_state` as yet another possible "region" division, and found that these large-level categorical predictors do in fact fine tune the prediction significantly.
 
@@ -174,7 +173,6 @@ Additionally, the simple `sample()` function does not guarantee the training and
 #seed
 epoch = 19700101 #The Epoch! https://en.wikipedia.org/wiki/Unix_time
 set.seed(epoch)
-
 
 #full 3.2M observations currently stored in `flight_data_pp`
 sub_obs = 20000
@@ -245,24 +243,93 @@ diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, 
 calc_rmse = function(resids) {
   sqrt(mean(resids ^ 2, na.rm = TRUE))
 }
-
 ```
 
-
->> <span style="color:red">Ryan, you might consider moving this to the appendix, or not. Either way we should probably say up front what we would have liked to do with the data and point to the write-ups in the appendix. passengers vs month, different response variables, making population predictions from passengers, etc.
-
-###Passengers vs. Month (High traffic significance?)
-
-For starters, we were curious to see whether `passengers` could be modeled as a response of `month` as a factor variable, verifying high-traffic seasons of flying.
-
-```{r}
-month_model = lm(passengers ~ month.chr, data = flight_sub_train)
-summary(month_model, data = flight_sub_train)
+```{r message = FALSE, echo=FALSE, warning=FALSE}
+print.sum2 =
+  function (x, digits = max(3L, getOption("digits") - 3L), symbolic.cor = x$symbolic.cor, 
+            signif.stars = getOption("show.signif.stars"), ...) 
+  {
+    cat("\nCall:\n", paste(deparse(x$call), sep = "\n", collapse = "\n"), 
+        "\n\n", sep = "")
+    resid <- x$residuals
+    df <- x$df
+    rdf <- df[2L]
+    cat(if (!is.null(x$weights) && diff(range(x$weights))) 
+      "Weighted ", "Residuals:\n", sep = "")
+    if (rdf > 5L) {
+      nam <- c("Min", "1Q", "Median", "3Q", "Max")
+      rq <- if (length(dim(resid)) == 2L) 
+        structure(apply(t(resid), 1L, quantile), dimnames = list(nam, 
+                                                                 dimnames(resid)[[2L]]))
+      else {
+        zz <- zapsmall(quantile(resid), digits + 1L)
+        structure(zz, names = nam)
+      }
+      print(rq, digits = digits, ...)
+    }
+    else if (rdf > 0L) {
+      print(resid, digits = digits, ...)
+    }
+    else {
+      cat("ALL", df[1L], "residuals are 0: no residual degrees of freedom!")
+      cat("\n")
+    }
+    if (length(x$aliased) == 0L) {
+      #cat("\nNo Coefficients\n")
+    }
+    else {
+      if (nsingular <- df[3L] - df[1L]) {
+        #cat("\nCoefficients: (", nsingular, " not defined because of singularities)\n", sep = "")
+      }
+      else {
+         #  cat("\nCoefficients:\n")
+      }
+      coefs <- x$coefficients
+      if (!is.null(aliased <- x$aliased) && any(aliased)) {
+        cn <- names(aliased)
+        coefs <- matrix(NA, length(aliased), 4, dimnames = list(cn, 
+                                                                colnames(coefs)))
+        coefs[!aliased, ] <- x$coefficients
+      }
+      #printCoefmat(coefs, digits = digits, signif.stars = signif.stars, na.print = "NA", ...)
+    }
+    cat("\nResidual standard error:", format(signif(x$sigma, 
+                                                    digits)), "on", rdf, "degrees of freedom")
+    cat("\n")
+    if (nzchar(mess <- naprint(x$na.action))) 
+      cat("  (", mess, ")\n", sep = "")
+    if (!is.null(x$fstatistic)) {
+      cat("Multiple R-squared: ", formatC(x$r.squared, digits = digits))
+      cat(",\tAdjusted R-squared: ", formatC(x$adj.r.squared, 
+                                             digits = digits), "\nF-statistic:", formatC(x$fstatistic[1L], 
+                                                                                         digits = digits), "on", x$fstatistic[2L], "and", 
+          x$fstatistic[3L], "DF,  p-value:", format.pval(pf(x$fstatistic[1L], 
+                                                            x$fstatistic[2L], x$fstatistic[3L], lower.tail = FALSE), 
+                                                         digits = digits))
+      cat("\n")
+    }
+    correl <- x$correlation
+    if (!is.null(correl)) {
+      p <- NCOL(correl)
+      if (p > 1L) {
+        cat("\nCorrelation of Coefficients:\n")
+        if (is.logical(symbolic.cor) && symbolic.cor) {
+          print(symnum(correl, abbr.colnames = NULL))
+        }
+        else {
+          correl <- format(round(correl, 2), nsmall = 2, 
+                           digits = digits)
+          correl[!lower.tri(correl)] <- ""
+          print(correl[-1, -p, drop = FALSE], quote = FALSE)
+        }
+      }
+    }
+    cat("\n")
+    invisible(x)
+  }
 ```
 
-Even though the p-value of this regression (`r pf(summary(month_model)$fstatistic[1], summary(month_model)$fstatistic[2], summary(month_model)$fstatistic[3], lower.tail = FALSE)`) is significant, the simple representation did not prove very fruitful at all, with an adjusted $R^2$ of `r summary(month_model)$adj.r.squared`.
-
-Some samplings seemed to verify heavy travel months in November & December; however, other samplings placed heavier travel months in February & March.  In the end, the high traffic significance did not prove any one month was heaver in air travel than any other, on average.  People seem to travel around the country at all times, with business travel (surmisingly) masking out any significance in originally-anticipated high-travel months.
 
 ###Correlations
 
@@ -290,7 +357,7 @@ flight_model_seats_flights | `r summary(flight_model_seats_flights)$adj.r.square
 
 ###Full-on additive
 
-To see which predictors may be worth including, we first formed a simple additive model considering all predictors, then passed it to `step()` using AIC & BIC to get a first opinion.
+Knowing that we probably couldn't get away with a 2-predictor additive model, and to see which predictors may be worth including, we first formed a complete additive model considering all predictors, then passed it to `step()` using AIC & BIC to get a first opinion.
 
 ```{r cache = TRUE}
 flight_model_big = lm(passengers ~ ., data = flight_sub_train)
@@ -310,14 +377,13 @@ test_rmse_big_bwd_bic  = calc_rmse(flight_sub_test$passengers -
 # List results
 summary(flight_model_big_bwd_aic)$call
 summary(flight_model_big_bwd_bic)$call
-
 ```
 
-The actual predictors retained during the stepwise model selection is sample dependent. We tested several different train/test samples to see how this varied.
+The actual predictors retained during the stepwise model selection are sample dependent.  We tested several different train/test samples to see how this varied.
 
 AIC fails to eliminate the "regional" categorical variables, normally choosing two of the three variables `origin_state`, `dest_state`, and `intra_regn`, whilst also keeping `month.chr`.  
 
-BIC eliminates all regional categorical variables, instead preferring `month.chr` as the only categorical variable.  The smaller model may be easier to work with at first, subsequently adding region variables and testing for significance.
+BIC eliminates all regional categorical variables, instead preferring `month.chr` as the only categorical variable.  This smaller model may be easier to work with at first, subsequently adding region variables and testing for significance.
 
 Also of note, BIC usually keeps `origin_pop` as a predictor and AIC usually discards it. BIC also sometimes keeps `dest_pop` as a predictor and AIC usually drops it.
 
@@ -346,8 +412,7 @@ We were hoping to **observe** a better relationship between `passengers` and eit
 
 Knowing a little more about the data allowed us to form initial [large] models to pass to `step()` using either AIC and/or BIC for selection:
 
-
-```{r}
+```{r cache = TRUE}
 #initial model best guess
 flight_model_best_guess = lm(passengers ~ seats * flights * month.chr * intra_regn + origin_state + dest_state + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub_train)
 
@@ -374,14 +439,11 @@ flight_model_best_guess | `r summary(flight_model_best_guess)$adj.r.squared` | `
 
 Although our educated best guess produced a model that fit the training data sample better, it did poorer on the test data sample. Running `step()` with AIC and BIC on this `fight_model_best_guess` did not produce a better model.
 
-
 ### Quadradic Model
 
-Our best model so far has been the `flight_model_big_bwd_aic` which started with all predictors and then used a backwards search using an AIC criteria for selecting $\beta$ parameters. We will start back with that model, and add an interaction between the highly correlated `seats` and `flights` and use a quadratic relationship with all numeric predictors and then allow the `step()` function to chose which are significant.
+Our best model so far has been the `flight_model_big_bwd_aic` which started with all predictors in an additive model and then used a backwards search using AIC for selecting $\beta$ parameters. We will start back with that model, and add an interaction between the highly correlated `seats` and `flights` and use a quadratic relationship with all numeric predictors and then allow the `step()` function to chose which are significant.
 
-
-```{r}
-
+```{r cache = TRUE}
 #Quadradic numeric predictors and an interaction between seats and flights
 flight_model_quad = lm(passengers ~ . + seats * flights + I(seats^2) + I(flights^2) + I(dist^2) + I(origin_pop^2) + I(dest_pop^2), data = flight_sub_train)
 
@@ -392,7 +454,6 @@ flight_model_quad_bwd_aic = step(flight_model_quad, direction = "backward", trac
 flight_model_quad_bwd_bic = step(flight_model_quad, direction = "backward", k = log(n), trace = 0)
 
 #Evaluate these models.
-
 train_rmse_quad_bwd_aic = calc_rmse(resid(flight_model_quad_bwd_aic))
 
 test_rmse_quad_bwd_aic  = calc_rmse(flight_sub_test$passengers -
@@ -408,11 +469,9 @@ summary(flight_model_quad_bwd_aic)$call
 summary(flight_model_quad_bwd_bic)$call
 
 diagnostics(flight_model_quad_bwd_aic, testit = FALSE)
-
 ```
 
-This mode is statistically significant with a p-value of (`r pf(summary(flight_model_quad_bwd_aic)$fstatistic[1], summary(flight_model_quad_bwd_aic)$fstatistic[2], summary(flight_model_quad_bwd_aic)$fstatistic[3], lower.tail = FALSE)`). The model does appear to violate assumptions of normality and homoscedasticity, but also consistenty makes a good prediction across all the samples we tested.
-
+This model (`flight_model_quad_bwd_aic`) is statistically significant with a p-value of (`r pf(summary(flight_model_quad_bwd_aic)$fstatistic[1], summary(flight_model_quad_bwd_aic)$fstatistic[2], summary(flight_model_quad_bwd_aic)$fstatistic[3], lower.tail = FALSE)`). The model does appear to violate assumptions of normality and homoscedasticity, but also consistently makes good predictions across all the samples we tested.
 
 *Model validation:*
 
@@ -425,11 +484,9 @@ flight_model_best_guess | `r summary(flight_model_best_guess)$adj.r.squared` | `
 flight_model_quad_bwd_aic | `r summary(flight_model_quad_bwd_aic)$adj.r.squared` | `r train_rmse_quad_bwd_aic` | `r test_rmse_quad_bwd_aic`
 flight_model_quad_bwd_bic | `r summary(flight_model_quad_bwd_bic)$adj.r.squared` | `r train_rmse_quad_bwd_bic` | `r test_rmse_quad_bwd_bic`
 
-
-
 ### Forward Search
 
-We also attempted to do a stepwise forward search. Although we offered `R` the same formula used in `flight_model_quad`, the forward stepwise search did not pick up `origin_state` and `dest_state` and therefore did not make as good of predictions. Not shown, but a forward/backward stepwise search also arrives at the same model as a forward search.
+Seeking further validation that we had found the best model, we also attempted to do a stepwise forward search.  Although we offered `R` the same formula used in `flight_model_quad`, the forward stepwise search did not pick up `origin_state` and `dest_state` and therefore did not make accurate predictions.  A bidirectional stepwise search also arrives at the same model as a forward search.
 
 ```{r cache = TRUE}
 #Start with no predictors
@@ -451,27 +508,21 @@ flight_model_quad_fwd_bic = step(flight_model_fwd,
                                 direction = "forward", k = log(n), trace = 0)
 
 #Evaluate these models.
-
 train_rmse_quad_fwd_aic = calc_rmse(resid(flight_model_quad_fwd_aic))
-
 test_rmse_quad_fwd_aic  = calc_rmse(flight_sub_test$passengers -
                                    predict(flight_model_quad_fwd_aic, flight_sub_test))
-
 train_rmse_quad_fwd_bic = calc_rmse(resid(flight_model_quad_fwd_bic))
-
 test_rmse_quad_fwd_bic  = calc_rmse(flight_sub_test$passengers -
                                    predict(flight_model_quad_fwd_bic, flight_sub_test))
 
 #List results
 summary(flight_model_quad_fwd_aic)$call
 summary(flight_model_quad_fwd_bic)$call
-
 ```
-
 
 ## Results
 
-Here is summary of how well the models perform on the test dataset.
+Here is a summary of how well all of the models we explored perform on test datasets:
 
 model (`passengers` as response) | adj.r.squared | train RMSE | test RMSE
 ------|---------------|------------|------------|-----------
@@ -484,13 +535,13 @@ flight_model_quad_bwd_bic | `r summary(flight_model_quad_bwd_bic)$adj.r.squared`
 flight_model_quad_fwd_aic | `r summary(flight_model_quad_fwd_aic)$adj.r.squared` | `r train_rmse_quad_fwd_aic` | `r test_rmse_quad_fwd_aic`
 flight_model_quad_fwd_bic | `r summary(flight_model_quad_fwd_bic)$adj.r.squared` | `r train_rmse_quad_fwd_bic` | `r test_rmse_quad_fwd_bic`
 
-Our chosen model is `flight_model_quad_bwd_aic` based on having a good adjusted $R^2$ and consistently having the best root mean squared error (RMSE) on the test dataset. It's a complex model summarized here:
+Our chosen model is `flight_model_quad_bwd_aic` based on having a good adjusted $R^2$ and consistently having the best root mean squared error (RMSE) on test datasets. It is a complex model summarized here:
 
 ```{r}
-summary(flight_model_quad_bwd_aic)
+print.sum2(summary(flight_model_quad_bwd_aic))
 ```
 
-Although our chosen model makes the best predictions, it does violate assumptions of normality and homoscedasticity.
+Although our chosen model makes the best predictions, it does appear to violate assumptions of normality and homoscedasticity.
 
 ```{r}
 diagnostics(flight_model_quad_bwd_aic, testit = FALSE)
@@ -498,25 +549,25 @@ diagnostics(flight_model_quad_bwd_aic, testit = FALSE)
 
 ## Discussion
 
-This dataset representing all US domestic flights from 1990 to 2009 has over 3 million records, which is largely about moving `passengers`.  We explored the data in multiple ways with our primary focus on predicting `passengers`.  Although the data contains several numerical and categorical predictors, what has the largest influence on predicting `passengers` is the `seats` available and the number of `flights`.  This is not surprising as airlines seek to fill all `seats`.  Having pricing information would have made exploring this space much more interesting.
+This dataset representing all US domestic flights from 1990 to 2009 has over 3 million records, which is largely concerned with moving `passengers`.  We explored the data in multiple ways with our primary focus on predicting `passengers`.  What airline statistician (or business executive for that matter) wouldn't like to know how many passengers were going to fly in a given month?  Although the data contains several numerical and categorical predictors, what ended up having the largest influence on predicting `passengers` are the `seats` available and the number of `flights`.  This is a logical conclusion to reach, realizing that airlines seek to fill all `seats`.  Having pricing information would have made exploring this space much more interesting.
 
-The small model that **explains** `passengers` in its easiest form is estimated from this sample as:
+The smallest model that **explains** `passengers` in its simplest form is estimated from this sample as:
 
 $$
-passengers =  `r coef(flight_model_seats_flights)[1]` + `r coef(flight_model_seats_flights)[2]` * seats + `r coef(flight_model_seats_flights)[3]` * flights
+passengers =  `r coef(flight_model_seats_flights)[1]` + (`r coef(flight_model_seats_flights)[2]`) \cdot seats + (`r coef(flight_model_seats_flights)[3]`) \cdot flights
 $$
-The regression shows that the more `seats` that are available between two points, the more `passengers` there are, however, the more `flights` there are between two points, reduces the `passengers`.  Presumably having more `flights` makes for a larger opportunity to have empty seats.  Using the adjusted $R^2$ value, this simple model explains about `r summary(flight_model_seats_flights)$adj.r.squared` of `passengers`. 
+The regression shows that the more `seats` that are available between two points, the more `passengers` there are; however, more `flights` between two points *reduces* the number of `passengers`.  Presumably, having more `flights` provides for a larger opportunity to have empty seats.  Using the adjusted $R^2$ value, this simple model explains about `r summary(flight_model_seats_flights)$adj.r.squared` of `passengers`. 
 
-The model that predicts `passengers` the best is a complex model (`flight_model_quad_bwd_aic`) that includes 51 levels for `origin_state`, 51 levels for `dest_state`, 20 levels for `year` and 12 levels for `month.chr`, as well as a quadratic fit on four numeric predictors. Having all these beta parameters makes this much harder to explain, but it does consistently predict best on the test dataset. We tried several different training/test set samples and `flight_model_quad_bwd_aic` consistently provided the best prediction as measured by the root mean square error (RMSE).  However, the gain in prediction accuracy doesn't appear to be very large as shown in the following table comparing the simple model to the complex model, due to `seats` and `flights` already explaining most of `passengers`.
+The model we found that best predicts `passengers` is a complex model (`flight_model_quad_bwd_aic`) that includes 51 levels for `origin_state`, 51 levels for `dest_state`, 20 levels for `year` and 12 levels for `month.chr`, as well as a quadratic fit on four numeric predictors.  Having all these beta parameters makes this much harder to explain, but it does consistently make the best predictions.  We tried several different training/test set samples and `flight_model_quad_bwd_aic` consistently provided the best prediction as measured by its root mean square error (RMSE).  However, the gain in prediction accuracy doesn't appear to be very large as shown in the following table comparing the simple model to the complex model, due to `seats` and `flights` already explaining most of `passengers`.
 
 model (passengers response) | adj.r.squared | train RMSE | test RMSE
 ------|---------------|------------|------------|-----------
 flight_model_seats_flights | `r summary(flight_model_seats_flights)$adj.r.squared` | `r train_rmse_seats_flights` | `r test_rmse_seats_flights`
 flight_model_quad_bwd_aic | `r summary(flight_model_quad_bwd_aic)$adj.r.squared` | `r train_rmse_quad_bwd_aic` | `r test_rmse_quad_bwd_aic`
 
-Model `flight_model_quad_bwd_aic` was arrived at with a backwards stepwise search starting with all predictors and included an interaction between `seats` and `flights` and quadratic terms for all numeric variables. AIC was the metric used to select predictors. For this dataset, the backwards search out performed both a forward search  and a forward/backward stepwise search. Searching with the BIC criteria did not yield models that tested quite as well, since BIC tended to discard the large factor variables `origin_state` and `dest_state`. However, the performance of the BIC chosen model is not much worse than the AIC chosen model so an agrument could be made that the less complex model is better.
+We arrived at `flight_model_quad_bwd_aic` using a backwards stepwise search starting with all predictors, an interaction between `seats` and `flights`, and quadratic terms for all numeric variables.  AIC was used to select predictors.  For this dataset, the backwards search out-performed both a forward search and a bidirectional stepwise search.  Searching with BIC did not yield models that tested quite as well, since BIC tended to discard the large factor variables `origin_state` and `dest_state`.  However, the performance of the model chosen by BIC is not much worse than the model chosen by AIC, so an agrument could be made that the less complex model is better, depending on goals or allowed flexibility.
 
-What is interesting about the AIC backwards search is that it kept most of the numeric predictors but discarded the `origin_pop`.  The search did find `dest_pop` was significant. The search also discarded the regional predictors we added initially with the intention of reducing complexity of the model.  We never attempted to fit a model with the origin / destination cities.  What we learned while testing models is the training dataset must have all factor levels present in order to make predictions on unseen test data.  That would be a hard sample to make.  The AIC search also found that the flight date (month, year) was significant for making predictions.
+What is interesting about the AIC backwards search is that it kept most of the numeric predictors but discarded `origin_pop`.  AIC did find that `dest_pop` was significant.  AIC also discarded the regional predictors we added with the intention of reducing complexity within the model.  We never attempted to fit a model with `origin_cty` or `dest_cty` (origin/destination city).  What we learned while testing models is that the training dataset must have all factor levels present in order to make predictions on unseen test data.  In the case of individual cities (`r length(unique(flight_data_pp$origin_cty))` origin cities, `r length(unique(flight_data_pp$dest_cty))` destination cities), that training dataset would be a hard one to "make."  AIC search also found that the flight date (`month.chr` and `year`) was significant for making predictions.
 
 Since the simple `flight_model_seats_flights` is nested in `flight_model_quad_bwd_aic` we can use an ANOVA F-test to test for significance.
 
@@ -525,8 +576,6 @@ Since the simple `flight_model_seats_flights` is nested in `flight_model_quad_bw
 ```
 
 `flight_model_quad_bwd_aic` is statistically significant with a p-value of `r t1$"Pr(>F)"[2]`, making this the best model we could find to predict `passengers`.
-
-
 
 >> <span style="color:red"> We need to answer: "How is your final model useful?""
 
@@ -539,9 +588,24 @@ Since the simple `flight_model_seats_flights` is nested in `flight_model_quad_bw
 
 - We were hoping to **observe** a better relationship between `passengers` and either `origin_pop` or `dest_pop`, but neither shows a distinguishable pattern in this sample.
 
+###(Appendix) Passengers vs. Month (High traffic significance?)
+
+*This quick mini-analysis was more of a curiosity.  Since it was not really used in determining the final model selected, we include it here, as an appendix.*
+
+For starters, we were curious to see whether `passengers` could be modeled as a response of `month` as a factor variable, verifying high-traffic seasons of flying.
+
+```{r}
+month_model = lm(passengers ~ month.chr, data = flight_sub_train)
+summary(month_model, data = flight_sub_train)
+```
+
+Even though the p-value of this regression (`r pf(summary(month_model)$fstatistic[1], summary(month_model)$fstatistic[2], summary(month_model)$fstatistic[3], lower.tail = FALSE)`) is significant, the simple representation did not prove very fruitful at all, with an adjusted $R^2$ of `r summary(month_model)$adj.r.squared`.
+
+Some samplings seemed to verify heavy travel months in November & December; however, other samplings placed heavier travel months in February & March.  In the end, the high traffic significance did not prove any one month was heaver in air travel than any other, on average.  People seem to travel around the country at all times, with business travel (surmisingly) masking out any significance in originally-anticipated high-travel months.
+
 ###(Appendix) Stepwise "big" model diagnostics
 
-When we initially started analyzing the big model selected by AIC & BIC, we ran into problems convincing ourselves that these models met normality and homoscedasticity assumptions.  Since our analysis focused upon prediction, these attempts were eventually abandoned, but are included for your amusement.
+*When we initially started analyzing the big model selected by AIC & BIC, we ran into problems convincing ourselves that these models met normality and homoscedasticity assumptions.  Since our analysis focused upon prediction, these attempts were eventually abandoned, but are included here for your amusement.*
 
 ```{r fig.height=5, fig.width=10, echo = FALSE}
 diagnostics(flight_model_best_guess, testit = FALSE)
@@ -574,12 +638,11 @@ max_pass = max(flight_sub_train$passengers)
 
 min_trans_pass = min(transform(flight_sub_train$passengers))
 max_trans_pass = max(transform(flight_sub_train$passengers))
-
 ```
 
 In the sampled dataset, the range of passengers is `r min_pass` to `r max_pass`. The Box-Cox transforms this into a much tighter range of `r min_trans_pass` to `r max_trans_pass`.
 
-```{r}
+```{r cache = TRUE}
 #perform response transformation
 flight_model_box = lm((passengers ^ lambda - 1) / lambda ~ 
                        seats * flights * month.chr * intra_regn + 
@@ -623,7 +686,6 @@ While the Fitted vs. Residuals and Q-Q plots have improved dramatically, they ar
 
 AIC still likes holding on to `origin_state` and `dest_state`, while BIC seems happy to remove them from the model. Both AIC & BIC retain some sort of region coding, however, as BIC keeps `intra_regn` in its model.
 
-
 *Model validation:*
 
 model (passengers response) | adj.r.squared | train RMSE | test RMSE
@@ -642,7 +704,7 @@ However, as shown in the above model validation table, while this Box-Cox transf
 
 ###(Appendix) Looking at influential observations
 
-During analysis when we were "tightening" up our model, we also took a look at influential observations, that usually fell into one of several categories:
+*During analysis when we were "tightening" up our model, we also took a look at influential observations, that usually fell into one of several categories:*
 
 * Short high volume flights
 * Medium- to long-distance low volume flights
@@ -657,8 +719,6 @@ plot(flight_model_quad_bwd_aic, which = 6)
 ```
 
 About `r percent`% of the training dataset are influential observations according to Cook's Distance heuristic.  Some of these observations are very large. However, these values appear to be valid data.  An example of a high influence observation comes from high volume short hops between the Hawaiian Islands. Removing some of the top influential observations does improved the residual errors slightly, but we cannot justify doing so.
-
-
 
 ###(Appendix) Model seats as response variable
 
@@ -675,10 +735,9 @@ test_rmse_pass_flights  = calc_rmse(flight_sub_test$seats -
 
 ```
 
-
 Below, we are starting off with a model that uses seats as an alternative response and then let AIC or BIC choose the best model. The model that we have started off with has an interaction between `passengers` and `flights` because these predictors are highly correlated. We have also chosen polynomial terms of `passengers` and `flights` because even though the correlation scatter plot shows that it is linear, we were curious to see whether the `step()` function using AIC or BIC criteria would choose these terms. We chose the polynomial terms of `dist`, `origin_pop`, and `dest_pop` due to the way the graph looks in the correlation scatter plot.  
 
-```{r}
+```{r cache = TRUE}
 flight_model_seats = lm(seats ~ . + 
                                 passengers * flights + I(passengers^2) + 
                                 I(flights^2) + I(dist^2) + 
@@ -718,16 +777,14 @@ flight_model_seats_bwd_bic | `r summary(flight_model_seats_bwd_bic)$adj.r.square
 
 Due to how correlated `seats`, `passengers` and `flights` are, the prediction power of a linear regression model is about the same for `seats` as for `passengers`. 
 
-
 ###(Appendix) Model flights as response variable
 
 Below, we are trying to see how well we can model `flights` and we performed a similar analysis as for `seats`. 
 
-```{r}
+```{r cache = TRUE}
 flight_model_pass_seats = lm(flights ~ passengers + seats, data = flight_sub_train)
 
 train_rmse_pass_seats   = calc_rmse(resid(flight_model_pass_seats))
-
 test_rmse_pass_seats    = calc_rmse(flight_sub_test$flights -
                                     predict(flight_model_pass_seats, flight_sub_test))
 
@@ -773,15 +830,11 @@ flight_model_flights_bwd_bic | `r summary(flight_model_flights_bwd_bic)$adj.r.sq
 
 Due to how correlated `flights`, `passengers` and `seats` are, the ability to predict `flights` mostly come from `passengers` and `seats`. 
 
-
-
 ###(Appendix) Model empty-seats as response variable
 
 It is also possible to take a slightly different look at the data and model empty seats for each record. 
 
-
-```{r}
-
+```{r cache = TRUE}
 # Make a temporary copies
 flight_sub_train2 = flight_sub_train
 flight_sub_test2  = flight_sub_test
@@ -820,13 +873,9 @@ summary(flight_model_empty_bwd_bic)$call
 
 ```
 
-
 model (`empty` as response) | adj.r.squared | train RMSE | test RMSE
 ------|---------------|------------|------------|-----------
 flight_model_empty_bwd_aic | `r summary(flight_model_empty_bwd_aic)$adj.r.squared` | `r train_rmse_empty_bwd_aic` | `r test_rmse_empty_bwd_aic`
 flight_model_empty_bwd_bic | `r summary(flight_model_empty_bwd_bic)$adj.r.squared` | `r train_rmse_empty_bwd_bic` | `r test_rmse_empty_bwd_bic`
 
 The regression analysis is significant and the predictors due predict a large proportion of `empty`.
-
-
-
