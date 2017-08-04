@@ -554,8 +554,8 @@ Where:
                               ND, NE, NH, NJ, NM, NV, NY, OH, OK, OR, PA, RI, SC, SD,
                               TN, TX, UT, VA, VT, WA, WI, WV, WY \}
 * $x_3$ = `intra_sub` = $\begin{cases}
-                            \text{TRUE,} & \text{if flight crosses subregions}\\
-                            \text{FALSE,} & \text{if flight is within subregion}\\
+                            \text{TRUE,} & \text{if flight is within subregion}\\
+                            \text{FALSE,} & \text{if flight arrived in different subregion}\\
                           \end{cases}$
 * $x_4$ = `seats` (numeric)
 * $x_5$ = `flights` (numeric)
@@ -610,6 +610,9 @@ Since the simple `flight_model_seats_flights` is nested in `flight_model_quad_bw
 
 ###Prediction case study, NY-FL
 
+```{r}
+#predict(flight_model_quad_bwd_aic, newdata = data.frame(origin_state = "NY", dest_state = "FL", ))
+```
 
 
 >> <span style="color:red"> We need to answer: "How is your final model useful?""
