@@ -15,7 +15,6 @@ knitr::opts_chunk$set(echo = TRUE)
 options(scipen = 1, digits = 4, width = 80)
 ```
 
-
 ## Introduction
 
 [This linked repository](https://github.com/ryusko2/stat420-analysis) contains our working files for this data analysis project.
@@ -416,7 +415,9 @@ Knowing a little more about the data allowed us to form initial [large] models t
 
 ```{r cache = TRUE}
 #initial model best guess
-flight_model_best_guess = lm(passengers ~ seats * flights * month.chr * intra_regn + origin_state + dest_state + I(dist^2) * I(origin_pop^2) * I(dest_pop^2), data = flight_sub_train)
+flight_model_best_guess = lm(passengers ~ seats * flights * month.chr * 
+                          intra_regn + origin_state + dest_state + I(dist^2) *
+                          I(origin_pop^2) * I(dest_pop^2), data = flight_sub_train)
 
 #Evaluate this model
 train_rmse_best_guess = calc_rmse(resid(flight_model_best_guess))
@@ -484,7 +485,7 @@ flight_model_quad_bwd_bic | `r summary(flight_model_quad_bwd_bic)$adj.r.squared`
 
 ### Forward Search
 
-Seeking further validation that we had found the best model, we also attempted to do a stepwise forward search.  Although we offered `R` the same formula used in `flight_model_quad`, the forward stepwise search did not pick up `origin_state` and `dest_state` and therefore did not make accurate predictions.  A bidirectional stepwise search also arrives at the same model as a forward search.
+Seeking further validation that we had found the best model, we also attempted to do a stepwise forward search.  Although we offered `R` the same formula used in `flight_model_quad`, the forward stepwise search did not pick up `origin_state` and `dest_state` and therefore did not make predictions as accurately.  A bidirectional stepwise search also arrives at the same model as a forward search.
 
 ```{r cache = TRUE}
 #Start with no predictors
@@ -518,9 +519,19 @@ summary(flight_model_quad_fwd_aic)$call
 summary(flight_model_quad_fwd_bic)$call
 ```
 
+###Statistical Significance
+
+As a final validation, we notice that the simple `flight_model_seats_flights` is nested in `flight_model_quad_bwd_aic`, so we can use an ANOVA F-test to test for significance.
+
+```{r}
+(t1 = anova(flight_model_seats_flights, flight_model_quad_bwd_aic))
+```
+
+This test confirms that our selected `flight_model_quad_bwd_aic` is statistically significant with a p-value of `r t1$"Pr(>F)"[2]`, making this the best model we could find to predict `passengers`.
+
 ## Results
 
-Here is a summary of how well all of the models we explored perform on test datasets:
+Below is a summary of how well the models explored thus far perform on test datasets. Many more models were explored, including variance stabilizing transforms via Box-Cox, as well as other combinations of interactions and polynomial terms.  However, these transformations and combinations did not lead to more accurate mean predictions.
 
 model (`passengers` as response) | adj.r.squared | train RMSE | test RMSE
 ------|---------------|------------|------------|-----------
@@ -574,17 +585,40 @@ Although our chosen model (with 140 $\beta$ parameters) makes the best predictio
 diagnostics(flight_model_quad_bwd_aic, testit = FALSE)
 ```
 
+## Discussion
+
+This dataset representing all US domestic flights from 1990 to 2009 has over 3 million records, which is largely concerned with moving `passengers`.  We explored the data in multiple ways with our primary focus on predicting `passengers`.  What airline statistician (or business executive for that matter) wouldn't like to know how many passengers were going to fly in a given month?  Although the data contains several numerical and categorical predictors, what ended up having the largest influence on predicting `passengers` are the `seats` available and the number of `flights`.  This is a logical conclusion to reach, realizing that airlines seek to fill all `seats`.  Having pricing information would have made exploring this space much more interesting.
+
+The smallest model that **explains** `passengers` in its simplest form is estimated from this sample as:
+
+$$
+passengers =  `r coef(flight_model_seats_flights)[1]` + (`r coef(flight_model_seats_flights)[2]`) \cdot seats + (`r coef(flight_model_seats_flights)[3]`) \cdot flights
+$$
+
+The regression shows that the more `seats` that are available between two points, the more `passengers` there are; however, more `flights` between two points *reduces* the number of `passengers`.  Presumably, having more `flights` provides for a larger opportunity to have empty seats.  Using the adjusted $R^2$ value, this simple model explains about `r summary(flight_model_seats_flights)$adj.r.squared` of `passengers`. 
+
+The model we found that best predicts `passengers` is a complex model (`flight_model_quad_bwd_aic`) that includes 51 levels for `origin_state`, 51 levels for `dest_state`, 20 levels for `year` and 12 levels for `month.chr`, as well as a quadratic fit on four numeric predictors.  Having all of these beta parameters makes this much harder to explain, but it does consistently make the best mean predictions.  We tried several different training/test set samples and `flight_model_quad_bwd_aic` consistently provided the best mean prediction as measured by its root mean squared error (RMSE).  However, the gain in mean prediction accuracy doesn't appear to be very large as shown in the following table comparing the simple model to the complex model, due to `seats` and `flights` already explaining most of `passengers`.
+
+model (passengers response) | adj.r.squared | train RMSE | test RMSE
+------|---------------|------------|------------|-----------
+flight_model_seats_flights | `r summary(flight_model_seats_flights)$adj.r.squared` | `r train_rmse_seats_flights` | `r test_rmse_seats_flights`
+flight_model_quad_bwd_aic | `r summary(flight_model_quad_bwd_aic)$adj.r.squared` | `r train_rmse_quad_bwd_aic` | `r test_rmse_quad_bwd_aic`
+
+We arrived at `flight_model_quad_bwd_aic` using a backwards stepwise search starting with all predictors, an interaction between `seats` and `flights`, and quadratic terms for all numeric variables.  AIC was used to select predictors.  For this dataset, the backwards search out-performed both a forward search and a bidirectional stepwise search.  Searching with BIC did not yield models that tested quite as well, since BIC tended to discard the large factor variables `origin_state` and `dest_state`.  However, the performance of the model chosen by BIC is not much worse than the model chosen by AIC, so an argument could be made that the less complex model is better, depending on goals or allowed flexibility.
+
+What is interesting about the AIC backwards search is that it kept most of the numeric predictors but discarded `origin_pop`.  AIC did find that `dest_pop` was significant.  AIC also discarded the regional predictors we added with the intention of reducing complexity within the model.  We never attempted to fit a model with `origin_cty` or `dest_cty` (origin/destination city).  What we learned while testing models is that the training dataset must have all factor levels present in order to make predictions on unseen test data.  In the case of individual cities (`r length(unique(flight_data_pp$origin_cty))` origin cities, `r length(unique(flight_data_pp$dest_cty))` destination cities), that training dataset would certainly be a hard one to compose.  AIC search also found that the flight date (`month.chr` and `year`) was significant for making mean predictions.
+
 ###Prediction case study, NY-FL (Inter-region), "January 2010"
 
 ```{r echo = FALSE}
 nyfl = subset(flight_data_pp, flight_data_pp$origin_state == "NY" & flight_data_pp$dest_state == "FL")
 ```
 
-This mini study represents a prediction for the number of passengers flying on an inter-region flight from NY to FL in January of 2010.  Since our model is restricted to the factors available in `year`, we will have to use the most recent data available (January 2009) to make our prediction for January of the following year, adjusting other variables as necessary.
+This mini study represents a mean prediction for the number of passengers flying on an inter-region flight from NY to FL in January of 2010.  Since our model is restricted to the factors available in `year`, we will have to use the most recent data available (January 2009) to make our mean prediction for January of the following year, adjusting other variables as necessary.
 
-Although the mean `seats` on all flights between NY and FL in 3.2M observations is `r mean(nyfl$seats)`, there are a high number of seats typically flown between New York City airports (JFK & LGA) and Fort Lauderdale, FL.  As an airline statistician, we are curious how many passengers might want to fly in January, and we are home alone for Christmas so this is a good time to crunch out some `R`.  
+Although the mean `seats` on all flights between NY and FL in 3.2M observations is `r mean(nyfl$seats)`, there are a high number of seats typically flown between New York City airports (JFK & LGA) and Fort Lauderdale, FL.  As an airline statistician, we are curious how many passengers might want to fly in January, and we are home alone just before Christmas so this is a good time to crunch out some `R`.  
 
-For the first prediction, we analyze this popular route with the following data frame, assuming we would make 50000 seats available by flying 308 flights to Fort Lauderdale, which has a new population of 5.5M:
+For the first mean prediction, we analyze this popular route with the following data frame, assuming we would make 50000 seats available by flying 308 flights to Fort Lauderdale, which has a new population of 5.5M:
 
 * `seats` = 50000
 * `flights` = 308
@@ -594,11 +628,11 @@ For the first prediction, we analyze this popular route with the following data 
 * `dest_pop` = 5500000
 
 ```{r}
-nyfl_50k_308 = predict(flight_model_quad_bwd_aic, newdata = data.frame(origin_state = "NY", dest_state = "FL", intra_subr = "FALSE", seats = 50000, flights = 308, dist = 1100, year = "2009", month.chr = "Jan", dest_pop = 5500000), interval = "prediction", level = 0.9)
+nyfl_50k_308 = predict(flight_model_quad_bwd_aic, newdata = data.frame(origin_state = "NY", dest_state = "FL", intra_subr = "FALSE", seats = 50000, flights = 308, dist = 1100, year = "2009", month.chr = "Jan", dest_pop = 5500000))
 nyfl_50k_308
 ```
 
-For a seat density (seats/flights) of `r 50000/308`, our model predicts that we will have `r nyfl_50k_308[1]` passengers.  Additionally, we can provide a 90% prediction interval that the mean passengers flown that month will be in the interval (`r nyfl_50k_308[2]`, `r nyfl_50k_308[3]`).  This represents a seat filled ratio of `r nyfl_50k_308[1]/50000*100`%.
+For a seat density (seats/flights) of `r 50000/308`, our model predicts that we will have `r nyfl_50k_308[1]` passengers.  This represents a seat filled ratio of `r nyfl_50k_308[1]/50000*100`%.
 
 The average seat density across all 3.2M observations is `r mean(flight_data_pp$seats)/mean(flight_data_pp$flights)`, so this density makes sense for a popular route.  For reference, a typical Boeing 737-800 can be configured with 175 seats, which would be a common aircraft to use on this route.
 
@@ -607,7 +641,7 @@ Let's just say management wasn't happy with a seat filled ratio of `r nyfl_50k_3
 For instance, if we change the number of flights to 230, our seat density becomes `r 50000/230`.  This number is more than a typical 737-800 will carry (overbooking); however, we can then expect:
 
 ```{r}
-nyfl_50k_230 = predict(flight_model_quad_bwd_aic, newdata = data.frame(origin_state = "NY", dest_state = "FL", intra_subr = "FALSE", seats = 50000, flights = 230, dist = 1100, year = "2009", month.chr = "Jan", dest_pop = 5500000), interval = "prediction", level = 0.9)
+nyfl_50k_230 = predict(flight_model_quad_bwd_aic, newdata = data.frame(origin_state = "NY", dest_state = "FL", intra_subr = "FALSE", seats = 50000, flights = 230, dist = 1100, year = "2009", month.chr = "Jan", dest_pop = 5500000))
 nyfl_50k_230
 ```
 
@@ -622,7 +656,7 @@ ilmn = subset(flight_data_pp, flight_data_pp$origin_state == "IL" & flight_data_
 ilmn_ord_msp = subset(ilmn, ilmn$origin_ICAO == "ORD" & ilmn$dest_ICAO == "MSP" & year == "2007" & month.chr == "Jul")
 ```
 
-This mini study represents a prediction for the number of passengers flying on an inter-region flight from IL to MO in July of 2007.
+This mini study represents a mean prediction for the number of passengers flying on an inter-region flight from IL to MO in July of 2007.
 
 Management has informed the overworked statistician that the seat filled ratio between O'Hare and Minneapolis was `r mean(ilmn_ord_msp$passengers)/mean(ilmn_ord_msp$seats)*100`% in July of 2007, and they are wondering what their excellent leadership did to cause such an abnormally high ratio.
 
@@ -636,52 +670,21 @@ We did not include individual airports in our model due to the exponential effec
 * `dest_pop` = 3200000
 
 ```{r}
-ilmn_25k_225 = predict(flight_model_quad_bwd_aic, newdata = data.frame(origin_state = "IL", dest_state = "MN", intra_subr = "TRUE", seats = 25000, flights = 225, dist = 334, year = "2007", month.chr = "Jul", dest_pop = 3200000), interval = "prediction", level = 0.9)
+ilmn_25k_225 = predict(flight_model_quad_bwd_aic, newdata = data.frame(origin_state = "IL", dest_state = "MN", intra_subr = "TRUE", seats = 25000, flights = 225, dist = 334, year = "2007", month.chr = "Jul", dest_pop = 3200000))
 ilmn_25k_225
 ```
 
 A seat density of `r 25000/225` is typical for the short flight between IL and MN; the route would typically be sourced by a 100-seat [Embraer E190](https://en.wikipedia.org/wiki/Embraer_E-Jet_family#E-190_and_195).
 
-Our model predicts that on average, flights from IL to MN would contain `r ilmn_25k_225[1]` passengers; or, passengers would be in a 90% prediction interval of (`r ilmn_25k_225[2]`, `r ilmn_25k_225[3]`).  This prediction corresponds to a seat filled ratio of `r ilmn_25k_225[1]/25000*100`%.
+Our model predicts that on average, flights from IL to MN would contain `r ilmn_25k_225[1]` passengers.  This mean prediction corresponds to a seat filled ratio of `r ilmn_25k_225[1]/25000*100`%.
 
 Being the underpaid statistician you are, however, you quickly inform management that even though we only expected `r ilmn_25k_225[1]/25000*100`% of our seats to be filled, `r mean(ilmn_ord_msp$passengers)/mean(ilmn_ord_msp$seats)*100`% were likely filled due to U of I students flocking to [Mall of America](https://en.wikipedia.org/wiki/Mall_of_America) to buy up an overstock of newly-released [Apple first-generation iPhones](https://en.wikipedia.org/wiki/IPhone_(1st_generation)), and therefore *not* due to their excellent leadership decisions.
 
-## Discussion
-
-This dataset representing all US domestic flights from 1990 to 2009 has over 3 million records, which is largely concerned with moving `passengers`.  We explored the data in multiple ways with our primary focus on predicting `passengers`.  What airline statistician (or business executive for that matter) wouldn't like to know how many passengers were going to fly in a given month?  Although the data contains several numerical and categorical predictors, what ended up having the largest influence on predicting `passengers` are the `seats` available and the number of `flights`.  This is a logical conclusion to reach, realizing that airlines seek to fill all `seats`.  Having pricing information would have made exploring this space much more interesting.
-
-The smallest model that **explains** `passengers` in its simplest form is estimated from this sample as:
-
-$$
-passengers =  `r coef(flight_model_seats_flights)[1]` + (`r coef(flight_model_seats_flights)[2]`) \cdot seats + (`r coef(flight_model_seats_flights)[3]`) \cdot flights
-$$
-
-The regression shows that the more `seats` that are available between two points, the more `passengers` there are; however, more `flights` between two points *reduces* the number of `passengers`.  Presumably, having more `flights` provides for a larger opportunity to have empty seats.  Using the adjusted $R^2$ value, this simple model explains about `r summary(flight_model_seats_flights)$adj.r.squared` of `passengers`. 
-
-The model we found that best predicts `passengers` is a complex model (`flight_model_quad_bwd_aic`) that includes 51 levels for `origin_state`, 51 levels for `dest_state`, 20 levels for `year` and 12 levels for `month.chr`, as well as a quadratic fit on four numeric predictors.  Having all of these beta parameters makes this much harder to explain, but it does consistently make the best predictions.  We tried several different training/test set samples and `flight_model_quad_bwd_aic` consistently provided the best prediction as measured by its root mean squared error (RMSE).  However, the gain in prediction accuracy doesn't appear to be very large as shown in the following table comparing the simple model to the complex model, due to `seats` and `flights` already explaining most of `passengers`.
-
-model (passengers response) | adj.r.squared | train RMSE | test RMSE
-------|---------------|------------|------------|-----------
-flight_model_seats_flights | `r summary(flight_model_seats_flights)$adj.r.squared` | `r train_rmse_seats_flights` | `r test_rmse_seats_flights`
-flight_model_quad_bwd_aic | `r summary(flight_model_quad_bwd_aic)$adj.r.squared` | `r train_rmse_quad_bwd_aic` | `r test_rmse_quad_bwd_aic`
-
-We arrived at `flight_model_quad_bwd_aic` using a backwards stepwise search starting with all predictors, an interaction between `seats` and `flights`, and quadratic terms for all numeric variables.  AIC was used to select predictors.  For this dataset, the backwards search out-performed both a forward search and a bidirectional stepwise search.  Searching with BIC did not yield models that tested quite as well, since BIC tended to discard the large factor variables `origin_state` and `dest_state`.  However, the performance of the model chosen by BIC is not much worse than the model chosen by AIC, so an argument could be made that the less complex model is better, depending on goals or allowed flexibility.
-
-What is interesting about the AIC backwards search is that it kept most of the numeric predictors but discarded `origin_pop`.  AIC did find that `dest_pop` was significant.  AIC also discarded the regional predictors we added with the intention of reducing complexity within the model.  We never attempted to fit a model with `origin_cty` or `dest_cty` (origin/destination city).  What we learned while testing models is that the training dataset must have all factor levels present in order to make predictions on unseen test data.  In the case of individual cities (`r length(unique(flight_data_pp$origin_cty))` origin cities, `r length(unique(flight_data_pp$dest_cty))` destination cities), that training dataset would certainly be a hard one to compose.  AIC search also found that the flight date (`month.chr` and `year`) was significant for making predictions.
-
-Since the simple `flight_model_seats_flights` is nested in `flight_model_quad_bwd_aic` we can use an ANOVA F-test to test for significance.
-
-```{r}
-(t1 = anova(flight_model_seats_flights, flight_model_quad_bwd_aic))
-```
-
-`flight_model_quad_bwd_aic` is statistically significant with a p-value of `r t1$"Pr(>F)"[2]`, making this the best model we could find to predict `passengers`.
-
-As can be seen in our two mini studies of inter- and intra-region travel, our chosen model is useful for a number of prediction applications.  Not only can it *accurately* predict passengers based on a number of variables, but it can also be used in a number of operational applications (cost analysis of changing seat densities, overbooking, etc.).
+As can be seen in our two mini studies of inter- and intra-region travel, our chosen model is useful for a number of prediction applications.  Not only can it *accurately* predict mean passengers based on a number of variables, but it can also be used in a number of operational applications (cost analysis of changing seat densities, overbooking, etc.).
 
 It bears repeating that inclusion of cost data would make this analysis more interesting...one has to think there is a direct correlation between passengers and ticket price.  However, ticket prices are subject to high variability, and could over-complicate the model.
 
-About halfway through our analysis, we discovered that the size of our dataset and the results we were finding lent themselves to a prediction model.  This is also the status quo of an airline statistician trying to maximize filled seats on their aircraft.  Since the goal of our model became prediction, we focused upon one thing and one thing only: RMSE.  Focusing on a prediction model allowed us to table the problems we had first experienced while trying to meet normality and homoscedasticity assumptions, and dealing with high collinearity between multiple variables.  This approach also led to a highly accurate and useful model for making `passenger` predictions in a wide variety of applications.  
+About halfway through our analysis, we discovered that the size of our dataset and the results we were finding lent themselves to a prediction model.  This is also the status quo of an airline statistician trying to maximize filled seats on their aircraft.  Since the goal of our model became prediction, we focused upon one thing and one thing only: RMSE.  Focusing on a prediction model allowed us to table the problems we had first experienced while trying to meet normality and homoscedasticity assumptions, and dealing with high collinearity between multiple variables.  This approach also led to a highly accurate and useful model for making `passenger` mean predictions in a wide variety of applications.  
 
 ##Appendix
 
@@ -698,7 +701,7 @@ summary(month_model, data = flight_sub_train)
 
 Even though the p-value of this regression (`r pf(summary(month_model)$fstatistic[1], summary(month_model)$fstatistic[2], summary(month_model)$fstatistic[3], lower.tail = FALSE)`) is significant, the simple representation did not prove very fruitful at all, with an adjusted $R^2$ of `r summary(month_model)$adj.r.squared`.
 
-Some samplings seemed to verify heavy travel months in November & December; however, other samplings placed heavier travel months in February & March.  In the end, the high traffic significance did not prove any one month was heaver in air travel than any other, on average.  People seem to travel around the country at all times, with business travel (surmisingly) masking out any significance in originally-anticipated high-travel months.
+Some samplings seemed to verify heavy travel months in November & December; however, other samplings placed heavier travel months in February & March.  In the end, the high traffic significance did not prove any one month was heaver in air travel than any other, on average.  People seem to travel around the country at all times, with business travel (surmisedly) masking out any significance in originally-anticipated high-travel months.
 
 ###Stepwise "big" model diagnostics
 
@@ -813,11 +816,9 @@ About `r percent`% of the training dataset are influential observations accordin
 
 ###Seats as the response variable
 
-*After analyzing the initial big model, we were curious whether models that used seats as a response variable would meet normality and homoscedasticity assumptions.*
+*After analyzing the initial `passenger` model, we were curious how well we could model `seats` as a response variable. Since `passengers` and `seats` are highly correlated, this analysis came out very similar to models for `passengers`.*
 
 We have followed a similar procedure to find the ideal model with seats as a response variable.  We then checked whether the model adhered to the assumptions.  However, we found that the model was similar to the big model in terms of the fitted values and we attribute this to the fact that passengers and seats are highly correlated. Therefore, we continued with using the big model. 
-
-We explored modeling other numeric variables other than `passengers` as the response. First let's do a simple model with `seats`.
 
 ```{r}
 # Simple model for comparison
@@ -867,15 +868,13 @@ flight_model_pass_flights | `r summary(flight_model_pass_flights)$adj.r.squared`
 flight_model_seats_bwd_aic | `r summary(flight_model_seats_bwd_aic)$adj.r.squared` | `r train_rmse_seats_bwd_aic` | `r test_rmse_seats_bwd_aic`
 flight_model_seats_bwd_bic | `r summary(flight_model_seats_bwd_bic)$adj.r.squared` | `r train_rmse_seats_bwd_bic` | `r test_rmse_seats_bwd_bic`
 
-Due to how correlated `seats`, `passengers` and `flights` are, the prediction power of a linear regression model is about the same for `seats` as it is for `passengers`. 
+Due to how correlated `seats`, `passengers` and `flights` are, the mean prediction power of a linear regression model is about the same for `seats` as it is for `passengers`. We further checked assumptions of normality and homoscedasticity and found similar violations to the models for `passengers`. Attempting a Box-Cox variance stabilizing transform on the `seats` response produced a model with higher RMSE values than the results shown above.
 
 ###Flights as the response variable
 
-*After starting with the big model, we wanted to see how well a model that used flights as a response would predict in comparison to the big model.*
+*After analyzing the initial `passenger` model, we were curious how well we could model `flights` as a response variable.*
 
 Again, we wanted to verify that the model that used flights as a response variable would meet the normality and homoscedasticity assumptions. After generating the model using `step()`, we noticed that this model is quite similar to the initial model because of the high correlation between flights and passengers and hence, we abandoned our efforts in this direction. 
-
-Below, we are trying to see how well we can model `flights` and we performed a similar analysis as for `seats`. 
 
 ```{r cache = TRUE}
 flight_model_pass_seats = lm(flights ~ passengers + seats, data = flight_sub_train)
@@ -920,11 +919,13 @@ flight_model_flights | `r summary(flight_model_flights)$adj.r.squared` | `r trai
 flight_model_flights_bwd_aic | `r summary(flight_model_flights_bwd_aic)$adj.r.squared` | `r train_rmse_flights_bwd_aic` | `r test_rmse_flights_bwd_aic`
 flight_model_flights_bwd_bic | `r summary(flight_model_flights_bwd_bic)$adj.r.squared` | `r train_rmse_flights_bwd_bic` | `r test_rmse_flights_bwd_bic`
 
-Due to how correlated `flights`, `passengers` and `seats` are, the ability to predict `flights` mostly comes from `passengers` and `seats`. 
+Although `passengers` and `flights` are highly correlated, the mean predictive power for this model is lower than for `passengers`, with an adjusted $R^2$ value of about `r summary(flight_model_flights_bwd_aic)$adj.r.squared`. Airplanes come in multiple sizes, so airlines have much more flexibility in selecting which size airplanes to fly on a particular route, which will result in more or less flights for a passenger load. Also, airlines may desire to have multiple smaller flights with more departure/arrival times, or less departure/arrival times using larger planes depending on connection needs.
+
+Since there are a much smaller number of `flights` per route than `passengers`, this results in a much smaller root mean squared error (RMSE) value which is not comparable to the RMSE values for `passengers` models.
 
 ###Empty seats as the response variable
 
-It is also possible to take a slightly different look at the data and model empty seats for each record. 
+*It is also possible to take a slightly different look at the data and model empty seats for each record.*
 
 ```{r cache = TRUE}
 # Make a temporary copies
